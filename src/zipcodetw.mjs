@@ -146,6 +146,39 @@ function decodeFrontCoded(text, onRow) {
   }
 }
 
+const gradualLookup = (zipcode) => {
+  if (zipcode.length >= 6) {
+    return { zipcode, source: 'gradual', resolution: 'six-digit' };
+  }
+  if (zipcode.length >= 3) {
+    return { zipcode: zipcode.slice(0, 3), source: 'gradual', resolution: 'three-digit' };
+  }
+  return { zipcode, source: 'gradual', resolution: 'prefix' };
+};
+
+export async function loadDirectory({ gradualUrl, preciseUrl, fetch: fetchImpl = globalThis.fetch } = {}) {
+  if (typeof fetchImpl !== 'function') {
+    throw new TypeError('A fetch implementation is required to load postal data.');
+  }
+
+  const fetchText = async (url) => {
+    if (typeof url !== 'string' || url === '') {
+      throw new TypeError('gradualUrl and preciseUrl must be non-empty strings.');
+    }
+    const response = await fetchImpl(url);
+    if (!response.ok) {
+      throw new Error(`Could not load postal data from ${url} (HTTP ${response.status}).`);
+    }
+    return response.text();
+  };
+
+  const [gradualTsv, preciseTsv] = await Promise.all([
+    fetchText(gradualUrl),
+    fetchText(preciseUrl),
+  ]);
+  return new Directory({ gradualTsv, preciseTsv });
+}
+
 export class Directory {
   constructor({ gradualTsv, preciseTsv }) {
     this.gradual = new Map();
@@ -161,7 +194,7 @@ export class Directory {
     });
   }
 
-  find(addrStr) {
+  lookup(addrStr) {
     const addr = new Address(addrStr);
     let lenAddrTokens = addr.tokens.length;
 
@@ -194,13 +227,20 @@ export class Directory {
       }
 
       for (const [ruleStr, zipcode] of rzpairs) {
-        if (new Rule(ruleStr).match(addr)) return zipcode;
+        if (new Rule(ruleStr).match(addr)) {
+          return { zipcode, source: 'precise', resolution: 'six-digit' };
+        }
       }
 
       const gzipcode = this.gradual.get(key);
-      if (gzipcode) return gzipcode;
+      if (gzipcode) return gradualLookup(gzipcode);
     }
 
-    return '';
+    return null;
+  }
+
+  find(addrStr) {
+    const match = this.lookup(addrStr);
+    return match === null || match.resolution === 'prefix' ? '' : match.zipcode;
   }
 }

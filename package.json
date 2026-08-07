@@ -5,17 +5,26 @@
   "type": "module",
   "license": "MIT",
   "main": "./src/node.mjs",
+  "types": "./src/node.d.ts",
   "exports": {
-    ".": "./src/node.mjs",
-    "./browser": "./src/zipcodetw.mjs"
+    ".": {
+      "types": "./src/node.d.ts",
+      "default": "./src/node.mjs"
+    },
+    "./browser": {
+      "types": "./src/zipcodetw.d.ts",
+      "default": "./src/zipcodetw.mjs"
+    }
   },
   "files": [
     "src",
+    "README.en.md",
     "data/gradual.tsv",
     "data/precise.tsv"
   ],
   "scripts": {
-    "test": "node --test",
+    "test": "npm run typecheck && node --test test/*.js",
+    "typecheck": "tsc --project tsconfig.json",
     "build": "python3 scripts/pack.py data/2606_01.csv data",
     "build:golden": "python3 scripts/build_golden_fixture.py data/2606_01.csv test/fixtures/golden_find.tsv"
   },
@@ -27,5 +36,8 @@
     "address",
     "fuzzy",
     "fuzzy-search"
-  ]
+  ],
+  "devDependencies": {
+    "typescript": "^7.0.2"
+  }
 }

@@ -23,3 +23,7 @@ export function getDirectory() {
 export function find(addrStr) {
   return getDirectory().find(addrStr);
 }
+
+export function lookup(addrStr) {
+  return getDirectory().lookup(addrStr);
+}

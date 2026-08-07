@@ -24,6 +24,7 @@ SOFTWARE.
 
 This is an independent JS port of the matching algorithm from moskytw/zipcodetw
 (https://github.com/moskytw/zipcodetw), also MIT licensed. The bundled address
-data in data/2102_01.csv originates from Chunghwa Post (中華郵政) and is
-redistributed as in the upstream project; verify its usage terms before any
-commercial deployment.
+data in data/2606_01.csv originates from Chunghwa Post (中華郵政) 3+3郵遞區號,
+redistributed here under Chunghwa Post's public license statement
+(3+3郵遞區號公開授權聲明, 2020-10-22), which permits free, non-exclusive
+reproduction and public presentation of this data via any interface.

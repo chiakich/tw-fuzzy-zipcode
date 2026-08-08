@@ -22,6 +22,8 @@ export function getDirectory() {
     directory = new Directory({
       gradualTsv: readFileSync(dataPath('gradual.tsv'), 'utf8'),
       preciseTsv: readFileSync(dataPath('precise.tsv'), 'utf8'),
+      // Server-side: spend the memory to keep hashed lookups.
+      storage: 'map',
     });
   }
   return directory;

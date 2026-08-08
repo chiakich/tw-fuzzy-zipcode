@@ -11,9 +11,25 @@ export interface LookupResult {
   resolution: LookupResolution;
 }
 
+/**
+ * `packed` (the default) flattens the tables into one string plus offset arrays
+ * and binary-searches them: ~4x less memory, slower per probe. `map` keeps hashed
+ * Maps for throughput. Prefer `packed` in a browser, `map` on a busy server.
+ */
+export type DirectoryStorage = 'packed' | 'map';
+
 export interface DirectoryData {
   gradualTsv: string;
   preciseTsv: string;
+  storage?: DirectoryStorage;
+}
+
+/** Backing store for the two packed tables; selected by {@link DirectoryStorage}. */
+export interface Store {
+  gradualGet(key: string): string | undefined;
+  preciseHas(key: string): boolean;
+  preciseKeys(): Iterable<string>;
+  preciseRules(key: string): [ruleStr: string, zipcode: string][];
 }
 
 export interface LoadDirectoryOptions {

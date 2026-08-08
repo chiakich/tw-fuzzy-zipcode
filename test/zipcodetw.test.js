@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { find, getDirectory, lookup } from '../src/node.mjs';
-import { loadDirectory } from '../src/zipcodetw.mjs';
+import { Directory, loadDirectory } from '../src/zipcodetw.mjs';
 
 const fixturePath = fileURLToPath(
   new URL('./fixtures/golden_find.tsv', import.meta.url),
@@ -88,6 +88,38 @@ test('never contradicts the Python reference', () => {
   }
   assert.equal(regressions, 0, `${regressions}/${lines.length} queries contradict the Python reference`);
   assert.ok(refinements > 0, 'expected the alias index to refine some reference answers');
+});
+
+test('the packed store answers identically to the map store', () => {
+  // Everything above exercises the Node entry point, which is Map-backed; the
+  // browser entry point defaults to the packed tables. Replay the same corpus
+  // through both so the binary search cannot drift from the hash lookups.
+  const dataPath = (name) => fileURLToPath(new URL(`../data/${name}`, import.meta.url));
+  const tsv = {
+    gradualTsv: readFileSync(dataPath('gradual.tsv'), 'utf8'),
+    preciseTsv: readFileSync(dataPath('precise.tsv'), 'utf8'),
+  };
+  const mapDir = new Directory({ ...tsv, storage: 'map' });
+  const packedDir = new Directory({ ...tsv, storage: 'packed' });
+
+  const lines = readFileSync(fixturePath, 'utf8').split('\n').filter(Boolean);
+  let mismatches = 0;
+  for (const line of lines) {
+    const query = line.slice(0, line.indexOf('\t'));
+    const fromMap = mapDir.find(query);
+    const fromPacked = packedDir.find(query);
+    if (fromMap === fromPacked) continue;
+    mismatches++;
+    if (mismatches <= 10) {
+      console.error(`differ: find(${JSON.stringify(query)}) map=${JSON.stringify(fromMap)} packed=${JSON.stringify(fromPacked)}`);
+    }
+  }
+  assert.equal(mismatches, 0, `${mismatches}/${lines.length} queries differ between storage backends`);
+
+  // aliasIndex() walks every precise key, so the two must enumerate alike.
+  const mapKeys = [...mapDir.store.preciseKeys()];
+  const packedKeys = [...packedDir.store.preciseKeys()];
+  assert.deepEqual(packedKeys, mapKeys);
 });
 
 test('resolves addresses that omit the city, the district, or both', () => {

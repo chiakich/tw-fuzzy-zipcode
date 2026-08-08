@@ -2,7 +2,7 @@
 
 // Types are imported from the declarations, not restated, so the two drift apart loudly.
 /**
- * @import { AddressToken, LookupResult, DirectoryData, LoadDirectoryOptions }
+ * @import { AddressToken, LookupResult, DirectoryData, LoadDirectoryOptions, Store }
  *   from './zipcodetw.d.ts'
  */
 
@@ -189,6 +189,178 @@ function decodeFrontCoded(text, onRow) {
   }
 }
 
+// Two storage backends sit behind the same three methods. Node keeps the Maps —
+// it has the headroom and wants the throughput. The browser packs the same rows
+// into one string plus offset arrays: ~4x less memory, ~18x slower per probe,
+// which is the right trade when a session runs a handful of queries.
+
+/** @implements {Store} */
+class MapStore {
+  /** @param {DirectoryData} data */
+  constructor({ gradualTsv, preciseTsv }) {
+    /** @type {Map<string, string>} */
+    this.gradual = new Map();
+    decodeFrontCoded(gradualTsv, (k, v) => this.gradual.set(k, v));
+
+    // Values stay as the raw encoded string until a lookup reaches the key;
+    // splitting all 44k of them up front costs more than most callers ever use.
+    /** @type {Map<string, string | [ruleStr: string, zipcode: string][]>} */
+    this.precise = new Map();
+    decodeFrontCoded(preciseTsv, (k, v) => this.precise.set(k, v));
+  }
+
+  /** @type {(key: string) => string | undefined} */
+  gradualGet(key) { return this.gradual.get(key); }
+
+  /** @type {(key: string) => boolean} */
+  preciseHas(key) { return this.precise.has(key); }
+
+  /** @type {() => Iterable<string>} */
+  preciseKeys() { return this.precise.keys(); }
+
+  /** @type {(key: string) => [ruleStr: string, zipcode: string][]} */
+  preciseRules(key) {
+    const entry = this.precise.get(key);
+    if (entry === undefined) return [];
+    if (typeof entry !== 'string') return entry;
+    const decoded = decodeRules(key, entry);
+    this.precise.set(key, decoded);
+    return decoded;
+  }
+}
+
+// Sorted key/value rows flattened into one string, addressed by offset. The
+// packer emits front-coded rows in sorted order and every key is BMP-only, so
+// charCodeAt order matches the order the rows were written in.
+class PackedTable {
+  /** @param {string} tsv */
+  constructor(tsv) {
+    /** @type {string[]} */ const keys = [];
+    /** @type {string[]} */ const vals = [];
+    /** @type {string | null} */
+    let prev = null;
+    decodeFrontCoded(tsv, (k, v) => {
+      if (prev !== null && prev >= k) {
+        throw new Error(`Postal data is not sorted at ${JSON.stringify(k)}; binary search needs sorted keys.`);
+      }
+      prev = k;
+      keys.push(k);
+      vals.push(v);
+    });
+
+    this.count = keys.length;
+    /** @type {Int32Array} start of each key, plus a terminating bound */
+    this.keyOffsets = new Int32Array(this.count + 1);
+    /** @type {Int32Array} start of each value, plus a terminating bound */
+    this.valOffsets = new Int32Array(this.count + 1);
+
+    let at = 0;
+    for (let i = 0; i < this.count; i++) { this.keyOffsets[i] = at; at += keys[i].length; }
+    this.keyOffsets[this.count] = at;
+    for (let i = 0; i < this.count; i++) { this.valOffsets[i] = at; at += vals[i].length; }
+    this.valOffsets[this.count] = at;
+
+    // The intermediate arrays die here; only the blob and the offsets survive.
+    /** @type {string} */
+    this.blob = keys.join('') + vals.join('');
+  }
+
+  // Compares blob[start, end) against key without slicing it out first —
+  // a probe runs ~17 of these, and the allocations dominated otherwise.
+  /**
+   * @param {number} index
+   * @param {string} key
+   * @returns {number}
+   */
+  compareAt(index, key) {
+    const start = this.keyOffsets[index];
+    const len = this.keyOffsets[index + 1] - start;
+    const shorter = len < key.length ? len : key.length;
+    for (let i = 0; i < shorter; i++) {
+      const diff = this.blob.charCodeAt(start + i) - key.charCodeAt(i);
+      if (diff !== 0) return diff;
+    }
+    return len - key.length;
+  }
+
+  /**
+   * @param {string} key
+   * @returns {number} index, or -1
+   */
+  indexOf(key) {
+    let lo = 0, hi = this.count - 1;
+    while (lo <= hi) {
+      const mid = (lo + hi) >> 1;
+      const diff = this.compareAt(mid, key);
+      if (diff === 0) return mid;
+      if (diff < 0) lo = mid + 1; else hi = mid - 1;
+    }
+    return -1;
+  }
+
+  /**
+   * @param {string} key
+   * @returns {string | undefined}
+   */
+  get(key) {
+    const i = this.indexOf(key);
+    return i < 0 ? undefined : this.blob.slice(this.valOffsets[i], this.valOffsets[i + 1]);
+  }
+
+  /** @returns {IterableIterator<string>} */
+  *keys() {
+    for (let i = 0; i < this.count; i++) {
+      yield this.blob.slice(this.keyOffsets[i], this.keyOffsets[i + 1]);
+    }
+  }
+}
+
+/** @implements {Store} */
+class PackedStore {
+  /** @param {DirectoryData} data */
+  constructor({ gradualTsv, preciseTsv }) {
+    this.gradual = new PackedTable(gradualTsv);
+    this.precise = new PackedTable(preciseTsv);
+    // Only keys an actual lookup reached; a session touches a few dozen.
+    /** @type {Map<string, [ruleStr: string, zipcode: string][]>} */
+    this.decoded = new Map();
+  }
+
+  /** @type {(key: string) => string | undefined} */
+  gradualGet(key) { return this.gradual.get(key); }
+
+  /** @type {(key: string) => boolean} */
+  preciseHas(key) { return this.precise.indexOf(key) >= 0; }
+
+  /** @type {() => Iterable<string>} */
+  preciseKeys() { return this.precise.keys(); }
+
+  /** @type {(key: string) => [ruleStr: string, zipcode: string][]} */
+  preciseRules(key) {
+    const memo = this.decoded.get(key);
+    if (memo !== undefined) return memo;
+    const entry = this.precise.get(key);
+    if (entry === undefined) return [];
+    const rules = decodeRules(key, entry);
+    this.decoded.set(key, rules);
+    return rules;
+  }
+}
+
+// Rule strings were stored as suffixes of the (normalized) address key.
+/**
+ * @param {string} key
+ * @param {string} entry
+ * @returns {[ruleStr: string, zipcode: string][]}
+ */
+function decodeRules(key, entry) {
+  if (entry === '') return [];
+  return entry.split(RS).map((r) => {
+    const i = r.indexOf(US);
+    return /** @type {[string, string]} */ ([key + r.slice(0, i), r.slice(i + 1)]);
+  });
+}
+
 // Where the locality/road part ends, i.e. before any trailing 巷/弄/號/樓 tokens.
 /**
  * @param {Address} addr
@@ -251,17 +423,11 @@ const RULE_CACHE_MAX = 5000;
 
 export class Directory {
   /** @param {DirectoryData} data */
-  constructor({ gradualTsv, preciseTsv }) {
-    /** @type {Map<string, string>} */
-    this.gradual = new Map();
-    decodeFrontCoded(gradualTsv, (k, v) => this.gradual.set(k, v));
-
-    // Values stay as the raw encoded string until a lookup reaches the key;
-    // splitting all 44k of them up front costs more than most callers ever use.
-    // See preciseRules() for the decoded shape.
-    /** @type {Map<string, string | [ruleStr: string, zipcode: string][]>} */
-    this.precise = new Map();
-    decodeFrontCoded(preciseTsv, (k, v) => this.precise.set(k, v));
+  constructor({ gradualTsv, preciseTsv, storage = 'packed' }) {
+    /** @type {Store} */
+    this.store = storage === 'map'
+      ? new MapStore({ gradualTsv, preciseTsv })
+      : new PackedStore({ gradualTsv, preciseTsv });
 
     /** @type {Map<string, string | null> | null} built on first miss, see aliasIndex() */
     this.alias = null;
@@ -292,22 +458,13 @@ export class Directory {
     return built;
   }
 
-  // Decodes a precise entry on first use and memoises it in place.
+  // Decoded on first use by whichever store is backing this directory.
   /**
    * @param {string} key
    * @returns {[ruleStr: string, zipcode: string][]}
    */
   preciseRules(key) {
-    const entry = this.precise.get(key);
-    if (entry === undefined) return [];
-    if (typeof entry !== 'string') return entry;
-    // Rule strings were stored as suffixes of the (normalized) address key.
-    const decoded = entry === '' ? [] : entry.split(RS).map((r) => {
-      const i = r.indexOf(US);
-      return /** @type {[string, string]} */ ([key + r.slice(0, i), r.slice(i + 1)]);
-    });
-    this.precise.set(key, decoded);
-    return decoded;
+    return this.store.preciseRules(key);
   }
 
   // 臺北市松江路 / 中山區松江路 / 松江路 -> 臺北市中山區松江路; null when the
@@ -316,7 +473,7 @@ export class Directory {
   aliasIndex() {
     if (this.alias) return this.alias;
     const alias = this.alias = new Map();
-    for (const key of this.precise.keys()) {
+    for (const key of this.store.preciseKeys()) {
       const tokens = tokenize(key);
       if (tokens.length < 3) continue;
       if (!'縣市'.includes(tokens[0][UNIT])) continue;
@@ -341,7 +498,7 @@ export class Directory {
     for (let i = startLenOf(addr); i > 0; i--) {
       const key = addr.flat(i);
       // Probe precise first: a well-formed address never pays for aliasIndex().
-      if (this.precise.has(key)) return;
+      if (this.store.preciseHas(key)) return;
       const alias = this.aliasIndex();
       // Ambiguous but known: stop rather than retry a shorter prefix, which would
       // drop a 段 token and alias onto an unrelated street of the same name.
@@ -390,7 +547,7 @@ export class Directory {
         }
       }
 
-      const gzipcode = this.gradual.get(key);
+      const gzipcode = this.store.gradualGet(key);
       if (gzipcode) return gradualLookup(gzipcode);
     }
 

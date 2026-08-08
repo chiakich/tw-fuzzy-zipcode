@@ -61,6 +61,8 @@ The data files are included in the npm package; copy them to a location your sit
 
 Type declarations for both the Node and browser entry points are included. No separate `@types` package is required.
 
+The implementation is `.mjs` — what is published is the source, with no build step, and browsers can load it directly — while the types live in matching `.d.ts` files. The two are held together by JSDoc annotations plus `checkJs`: `test/conformance.test.ts` asserts at compile time that what `.mjs` actually exports matches what `.d.ts` declares, so changing either side alone fails `npm run typecheck`.
+
 ## Features and data size
 
 The matcher compares address fragments and house-number rules in order, including odd/even, above, below, and range rules. The bundled June 2026 dataset contains 79,845 precise rules and 162,470 gradual address entries.
@@ -92,7 +94,7 @@ npm run typecheck
 npm test
 ```
 
-`npm run typecheck` verifies the public TypeScript types. `npm test` runs that type check first, then uses fixtures generated from the original Python package to verify the JavaScript implementation. Invalid 4-/5-digit common prefixes from the gradual index are normalized to 3 digits according to the public API contract.
+`npm run typecheck` type-checks the `src/*.mjs` implementation with `checkJs` and verifies it against the public type declarations. `npm test` runs that type check first, then uses fixtures generated from the original Python package to verify the JavaScript implementation. Invalid 4-/5-digit common prefixes from the gradual index are normalized to 3 digits according to the public API contract.
 
 ## License
 

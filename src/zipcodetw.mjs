@@ -1,5 +1,14 @@
 // Port of moskytw/zipcodetw (util.py) to JS. Query side only; the index is prebuilt.
 
+/**
+ * Types come from the hand-written declarations rather than being restated
+ * here, so `npm run typecheck` fails if this file and zipcodetw.d.ts drift
+ * apart. test/conformance.test.ts asserts the module as a whole still matches.
+ *
+ * @import { AddressToken, LookupResult, DirectoryData, LoadDirectoryOptions }
+ *   from './zipcodetw.d.ts'
+ */
+
 const NO = 0, SUBNO = 1, NAME = 2, UNIT = 3;
 
 const TO_REPLACE_MAP = new Map(Object.entries({
@@ -22,41 +31,62 @@ const TOKEN_RE =
 const RULE_TOKEN_RE =
   /及以上附號|含附號以下|含附號全|含附號|以下|以上|附號全|[連至單雙全](?=[\d全]|$)/g;
 
+/**
+ * @param {string} s
+ * @returns {string}
+ */
 export function normalize(s) {
   return s.replace(TO_REPLACE_RE, (found) => {
     const mapped = TO_REPLACE_MAP.get(found);
     if (mapped !== undefined) return mapped;
+    // Every character reaching here is in the regexp's numeral classes, so the
+    // map lookups below always hit; '' keeps the fallback total regardless.
     if (CHINESE_NUMERALS.has(found[0])) {
-      if (found.length === 2) return '1' + TO_REPLACE_MAP.get(found[1]);
-      if (found.length === 3) return TO_REPLACE_MAP.get(found[0]) + TO_REPLACE_MAP.get(found[2]);
+      if (found.length === 2) return '1' + (TO_REPLACE_MAP.get(found[1]) ?? '');
+      if (found.length === 3) {
+        return (TO_REPLACE_MAP.get(found[0]) ?? '') + (TO_REPLACE_MAP.get(found[2]) ?? '');
+      }
     }
     return '';
   });
 }
 
-// Python's findall yields '' for unmatched groups, JS yields undefined.
+/**
+ * Python's findall yields '' for unmatched groups, JS yields undefined.
+ *
+ * @param {string} addrStr
+ * @returns {AddressToken[]}
+ */
 export function tokenize(addrStr) {
+  /** @type {AddressToken[]} */
   const out = [];
   for (const m of normalize(addrStr).matchAll(TOKEN_RE)) {
-    const g = m.groups;
+    const g = m.groups ?? {};
     out.push([g.no ?? '', g.subno ?? '', g.name ?? '', g.unit ?? '']);
   }
   return out;
 }
 
+/** @type {(a: AddressToken, b: AddressToken) => boolean} */
 const tokenEq = (a, b) =>
   a[0] === b[0] && a[1] === b[1] && a[2] === b[2] && a[3] === b[3];
 
 // Python compares (no, subno) tuples lexicographically.
+/** @type {(a: [number, number], b: [number, number]) => number} */
 const cmpPair = (a, b) => (a[0] - b[0]) || (a[1] - b[1]);
 
 export class Address {
+  /** @param {string} addrStr */
   constructor(addrStr) {
     this.tokens = tokenize(addrStr);
   }
 
   // Mirrors flat(sarg=None, *sargs) -> tokens[slice(sarg, *sargs)]:
   // one arg is a *stop*, two args are start/stop.
+  /**
+   * @param {...number} args
+   * @returns {string}
+   */
   flat(...args) {
     let part;
     if (args.length === 0) part = this.tokens;
@@ -65,10 +95,18 @@ export class Address {
     return part.map((t) => t.join('')).join('');
   }
 
+  /**
+   * @param {...number} idxs
+   * @returns {string}
+   */
   pickToFlat(...idxs) {
     return idxs.map((i) => this.tokens[i].join('')).join('');
   }
 
+  /**
+   * @param {number} idx
+   * @returns {[number, number]}
+   */
   parse(idx) {
     const i = idx < 0 ? this.tokens.length + idx : idx;
     const token = (i < 0 || i >= this.tokens.length) ? undefined : this.tokens[i];
@@ -81,7 +119,9 @@ export class Address {
 }
 
 export class Rule extends Address {
+  /** @param {string} ruleStr */
   constructor(ruleStr) {
+    /** @type {Set<string>} */
     const ruleTokens = new Set();
     const addrStr = normalize(ruleStr).replace(RULE_TOKEN_RE, (m) => {
       let token = m, retval = '';
@@ -94,6 +134,10 @@ export class Rule extends Address {
     this.ruleTokens = ruleTokens;
   }
 
+  /**
+   * @param {Address} addr
+   * @returns {boolean}
+   */
   match(addr) {
     let myLastPos = this.tokens.length - 1;
     myLastPos -= (this.ruleTokens.size > 0 && !this.ruleTokens.has('全')) ? 1 : 0;
@@ -135,6 +179,10 @@ export class Rule extends Address {
 
 const US = '\x1f', RS = '\x1e';
 
+/**
+ * @param {string} text
+ * @param {(key: string, value: string) => void} onRow
+ */
 function decodeFrontCoded(text, onRow) {
   let prev = '';
   for (const line of text.split('\n')) {
@@ -148,6 +196,10 @@ function decodeFrontCoded(text, onRow) {
 
 // The largest prefix length that does not end inside a run of numbered tokens
 // (巷/弄/號/樓) — i.e. where the locality/road part of the address stops.
+/**
+ * @param {Address} addr
+ * @returns {number}
+ */
 function startLenOf(addr) {
   let startLen = addr.tokens.length;
   while (startLen >= 0) {
@@ -158,6 +210,7 @@ function startLenOf(addr) {
   return startLen;
 }
 
+/** @type {(zipcode: string) => LookupResult} */
 const gradualLookup = (zipcode) => {
   if (zipcode.length >= 6) {
     return { zipcode, source: 'gradual', resolution: 'six-digit' };
@@ -168,11 +221,22 @@ const gradualLookup = (zipcode) => {
   return { zipcode, source: 'gradual', resolution: 'prefix' };
 };
 
+/**
+ * The published signature requires both URLs; Partial here just keeps the
+ * runtime guard below reachable, which reports a clearer error than a failed
+ * destructuring would.
+ *
+ * @param {Partial<LoadDirectoryOptions>} [options]
+ * @returns {Promise<Directory>}
+ */
 export async function loadDirectory({ gradualUrl, preciseUrl, fetch: fetchImpl = globalThis.fetch } = {}) {
   if (typeof fetchImpl !== 'function') {
     throw new TypeError('A fetch implementation is required to load postal data.');
   }
 
+  // Takes `string | undefined` on purpose: the guard below is what turns a
+  // missing URL into a useful message.
+  /** @type {(url: string | undefined) => Promise<string>} */
   const fetchText = async (url) => {
     if (typeof url !== 'string' || url === '') {
       throw new TypeError('gradualUrl and preciseUrl must be non-empty strings.');
@@ -192,10 +256,13 @@ export async function loadDirectory({ gradualUrl, preciseUrl, fetch: fetchImpl =
 }
 
 export class Directory {
+  /** @param {DirectoryData} data */
   constructor({ gradualTsv, preciseTsv }) {
+    /** @type {Map<string, string>} */
     this.gradual = new Map();
     decodeFrontCoded(gradualTsv, (k, v) => this.gradual.set(k, v));
 
+    /** @type {Map<string, [ruleStr: string, zipcode: string][]>} */
     this.precise = new Map();
     decodeFrontCoded(preciseTsv, (k, v) => {
       // Rule strings were stored as suffixes of the (normalized) address key.
@@ -205,7 +272,8 @@ export class Directory {
       }));
     });
 
-    this.alias = null; // built on first miss, see aliasIndex()
+    /** @type {Map<string, string | null> | null} built on first miss, see aliasIndex() */
+    this.alias = null;
   }
 
   // Maps abbreviated locality forms back to the canonical precise key:
@@ -213,9 +281,10 @@ export class Directory {
   // more than one canonical address are recorded as null so they stay
   // unresolved rather than resolving arbitrarily. Costs ~100ms over the whole
   // index, so it is deferred until an address actually needs it.
+  /** @returns {Map<string, string | null>} */
   aliasIndex() {
     if (this.alias) return this.alias;
-    this.alias = new Map();
+    const alias = this.alias = new Map();
     for (const key of this.precise.keys()) {
       const tokens = tokenize(key);
       if (tokens.length < 3) continue;
@@ -226,11 +295,11 @@ export class Directory {
           .filter((_, i) => !dropped.includes(i))
           .map((t) => t.join(''))
           .join('');
-        if (!this.alias.has(form)) this.alias.set(form, key);
-        else if (this.alias.get(form) !== key) this.alias.set(form, null);
+        if (!alias.has(form)) alias.set(form, key);
+        else if (alias.get(form) !== key) alias.set(form, null);
       }
     }
-    return this.alias;
+    return alias;
   }
 
   // The precise index is keyed by the full 縣市 + 鄉鎮市區 + 路名 form, but
@@ -238,20 +307,27 @@ export class Directory {
   // carry those abbreviated keys, so lookup() would otherwise stop there and
   // return a coarse prefix without ever consulting the rules. Splice the
   // missing tokens back in when the abbreviation is unambiguous.
+  /** @param {Address} addr */
   canonicalize(addr) {
     for (let i = startLenOf(addr); i > 0; i--) {
       const key = addr.flat(i);
+      // Probe precise first: a well-formed address never pays for aliasIndex().
       if (this.precise.has(key)) return;
+      const alias = this.aliasIndex();
       // A known-but-ambiguous form stops the walk: the address is real, we just
       // cannot tell which district it is. Falling through to a shorter prefix
       // would drop a 段 or 路 token and alias onto an unrelated street.
-      if (!this.aliasIndex().has(key)) continue;
-      const canonical = this.alias.get(key);
+      if (!alias.has(key)) continue;
+      const canonical = alias.get(key);
       if (canonical) addr.tokens.splice(0, i, ...tokenize(canonical));
       return;
     }
   }
 
+  /**
+   * @param {string} addrStr
+   * @returns {LookupResult | null}
+   */
   lookup(addrStr) {
     const addr = new Address(addrStr);
     this.canonicalize(addr);
@@ -293,6 +369,10 @@ export class Directory {
     return null;
   }
 
+  /**
+   * @param {string} addrStr
+   * @returns {string}
+   */
   find(addrStr) {
     const match = this.lookup(addrStr);
     return match === null || match.resolution === 'prefix' ? '' : match.zipcode;

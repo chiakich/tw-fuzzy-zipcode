@@ -5,11 +5,18 @@ import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { Directory } from './zipcodetw.mjs';
 
+export { Directory } from './zipcodetw.mjs';
+
+/** @import { LookupResult } from './zipcodetw.d.ts' */
+
+/** @type {(name: string) => string} */
 const dataPath = (name) =>
   fileURLToPath(new URL(`../data/${name}`, import.meta.url));
 
+/** @type {Directory | undefined} */
 let directory;
 
+/** @returns {Directory} */
 export function getDirectory() {
   if (!directory) {
     directory = new Directory({
@@ -20,10 +27,18 @@ export function getDirectory() {
   return directory;
 }
 
+/**
+ * @param {string} addrStr
+ * @returns {string}
+ */
 export function find(addrStr) {
   return getDirectory().find(addrStr);
 }
 
+/**
+ * @param {string} addrStr
+ * @returns {LookupResult | null}
+ */
 export function lookup(addrStr) {
   return getDirectory().lookup(addrStr);
 }

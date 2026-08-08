@@ -5,9 +5,13 @@
     "moduleResolution": "NodeNext",
     "strict": true,
     "noEmit": true,
-    "skipLibCheck": true
+    "skipLibCheck": true,
+    "allowJs": true,
+    "checkJs": true,
+    "types": ["node"]
   },
   "include": [
+    "src/**/*.mjs",
     "src/**/*.d.ts",
     "test/**/*.test.ts"
   ]

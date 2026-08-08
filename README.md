@@ -61,6 +61,8 @@ directory.find('臺北市信義區市府路1號'); // '110204'
 
 套件內含 Node 與瀏覽器入口的 TypeScript 型別宣告，無須額外安裝 `@types` 套件。
 
+實作是 `.mjs`（發布的就是原始碼，沒有建置步驟，瀏覽器可直接載入），型別宣告則寫在對應的 `.d.ts`。兩者透過 JSDoc 標註與 `checkJs` 互相驗證：`test/conformance.test.ts` 會在編譯期斷言 `.mjs` 實際匯出的內容符合 `.d.ts` 的宣告，任一邊改動而未同步都會讓 `npm run typecheck` 失敗。
+
 
 ## 特性與資料規模
 
@@ -93,7 +95,7 @@ npm run typecheck
 npm test
 ```
 
-`npm run typecheck` 會驗證公開 TypeScript 型別；`npm test` 會先執行型別檢查，再以原始 Python 套件產生的基準資料驗證 JavaScript 實作。漸進式索引產生的無效 4／5 碼共同前綴，會依公開 API 規則正規化為 3 碼。
+`npm run typecheck` 會以 `checkJs` 檢查 `src/*.mjs` 的實作，並驗證它與公開型別宣告一致；`npm test` 會先執行型別檢查，再以原始 Python 套件產生的基準資料驗證 JavaScript 實作。漸進式索引產生的無效 4／5 碼共同前綴，會依公開 API 規則正規化為 3 碼。
 
 
 ## 授權

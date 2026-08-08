@@ -27,7 +27,6 @@ function showResult(address) {
   const message = document.createElement('p');
   if (zipcode) {
     rememberAddress(address);
-    if (!suggestions.hidden) renderSuggestions();
     message.className = 'result-match';
     const code = document.createElement('strong');
     code.className = 'zipcode';
@@ -70,12 +69,12 @@ function removeRecentAddress(address) {
   }
 }
 
+// Only offered on an empty query: the panel is a "what do I type" affordance,
+// and restricting it that way is what keeps it off the result below.
 function renderSuggestions() {
   const recentAddresses = getRecentAddresses();
   const isRecent = recentAddresses.length > 0;
-  const query = input.value.trim();
-  const source = isRecent ? recentAddresses : exampleAddresses;
-  const addresses = query ? source.filter((address) => address.includes(query)) : source;
+  const addresses = input.value.trim() ? [] : (isRecent ? recentAddresses : exampleAddresses);
 
   suggestions.replaceChildren();
   if (addresses.length === 0) {
@@ -172,6 +171,7 @@ clearButton.addEventListener('click', () => {
   result.hidden = true;
   updateClearButton();
   input.focus();
+  showSuggestions();
 });
 
 loadDemoDirectory().then(() => {

@@ -41,7 +41,12 @@ jobs:
           cp -R data _site/data
           touch _site/.nojekyll
           printf 'zipcode.chiaki.ch' > _site/CNAME
-          printf '<meta http-equiv="refresh" content="0; url=./demo/">' > _site/index.html
+          # Serve the demo at the site root. Its assets stay under demo/ so the
+          # relative paths in app.js (../src, ../data) resolve exactly as they do
+          # when the repo is served locally; only the two asset refs move.
+          sed 's|"\./style\.css"|"./demo/style.css"|; s|"\./app\.js"|"./demo/app.js"|' \
+            demo/index.html > _site/index.html
+          printf '<meta http-equiv="refresh" content="0; url=/">' > _site/demo/index.html
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
         with:

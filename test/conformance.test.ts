@@ -1,11 +1,6 @@
-// Compile-time only: nothing here runs, but `npm run typecheck` fails if the
-// hand-written declarations in src/*.d.ts stop describing what src/*.mjs
-// actually exports. Without this, the two files are checked in isolation and a
-// signature can be changed on one side alone without anything noticing.
-//
-// Assignability runs implementation -> declaration, so the implementation may
-// carry extra internals (Directory.aliasIndex, Directory.canonicalize) that the
-// published surface deliberately keeps quiet about.
+// Compile-time only: nothing here runs. Without it the .mjs and its .d.ts are
+// checked in isolation and either side can change alone. Assignability runs
+// implementation -> declaration, so internals absent from the .d.ts are fine.
 
 import type * as browserDecl from '../src/zipcodetw.d.ts';
 import type * as nodeDecl from '../src/node.d.ts';

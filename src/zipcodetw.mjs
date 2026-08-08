@@ -1,10 +1,7 @@
 // Port of moskytw/zipcodetw (util.py) to JS. Query side only; the index is prebuilt.
 
+// Types are imported from the declarations, not restated, so the two drift apart loudly.
 /**
- * Types come from the hand-written declarations rather than being restated
- * here, so `npm run typecheck` fails if this file and zipcodetw.d.ts drift
- * apart. test/conformance.test.ts asserts the module as a whole still matches.
- *
  * @import { AddressToken, LookupResult, DirectoryData, LoadDirectoryOptions }
  *   from './zipcodetw.d.ts'
  */
@@ -39,8 +36,6 @@ export function normalize(s) {
   return s.replace(TO_REPLACE_RE, (found) => {
     const mapped = TO_REPLACE_MAP.get(found);
     if (mapped !== undefined) return mapped;
-    // Every character reaching here is in the regexp's numeral classes, so the
-    // map lookups below always hit; '' keeps the fallback total regardless.
     if (CHINESE_NUMERALS.has(found[0])) {
       if (found.length === 2) return '1' + (TO_REPLACE_MAP.get(found[1]) ?? '');
       if (found.length === 3) {
@@ -194,8 +189,7 @@ function decodeFrontCoded(text, onRow) {
   }
 }
 
-// The largest prefix length that does not end inside a run of numbered tokens
-// (巷/弄/號/樓) — i.e. where the locality/road part of the address stops.
+// Where the locality/road part ends, i.e. before any trailing 巷/弄/號/樓 tokens.
 /**
  * @param {Address} addr
  * @returns {number}
@@ -221,11 +215,8 @@ const gradualLookup = (zipcode) => {
   return { zipcode, source: 'gradual', resolution: 'prefix' };
 };
 
+// Partial, unlike the published signature, so the runtime guard below stays reachable.
 /**
- * The published signature requires both URLs; Partial here just keeps the
- * runtime guard below reachable, which reports a clearer error than a failed
- * destructuring would.
- *
  * @param {Partial<LoadDirectoryOptions>} [options]
  * @returns {Promise<Directory>}
  */
@@ -234,8 +225,6 @@ export async function loadDirectory({ gradualUrl, preciseUrl, fetch: fetchImpl =
     throw new TypeError('A fetch implementation is required to load postal data.');
   }
 
-  // Takes `string | undefined` on purpose: the guard below is what turns a
-  // missing URL into a useful message.
   /** @type {(url: string | undefined) => Promise<string>} */
   const fetchText = async (url) => {
     if (typeof url !== 'string' || url === '') {
@@ -276,11 +265,8 @@ export class Directory {
     this.alias = null;
   }
 
-  // Maps abbreviated locality forms back to the canonical precise key:
-  // 新北市溪尾街 / 三重區溪尾街 / 溪尾街 -> 新北市三重區溪尾街. Forms that name
-  // more than one canonical address are recorded as null so they stay
-  // unresolved rather than resolving arbitrarily. Costs ~100ms over the whole
-  // index, so it is deferred until an address actually needs it.
+  // 臺北市松江路 / 中山區松江路 / 松江路 -> 臺北市中山區松江路; null when the
+  // form names more than one address. ~100ms to build, hence the laziness.
   /** @returns {Map<string, string | null>} */
   aliasIndex() {
     if (this.alias) return this.alias;
@@ -302,11 +288,9 @@ export class Directory {
     return alias;
   }
 
-  // The precise index is keyed by the full 縣市 + 鄉鎮市區 + 路名 form, but
-  // people routinely drop one or both locality tokens. The gradual index does
-  // carry those abbreviated keys, so lookup() would otherwise stop there and
-  // return a coarse prefix without ever consulting the rules. Splice the
-  // missing tokens back in when the abbreviation is unambiguous.
+  // The precise index only has full 縣市 + 鄉鎮市區 + 路名 keys, but the gradual
+  // index has the abbreviated ones, so lookup() would stop there and never reach
+  // the rules. Restore the dropped tokens when the abbreviation is unambiguous.
   /** @param {Address} addr */
   canonicalize(addr) {
     for (let i = startLenOf(addr); i > 0; i--) {
@@ -314,9 +298,8 @@ export class Directory {
       // Probe precise first: a well-formed address never pays for aliasIndex().
       if (this.precise.has(key)) return;
       const alias = this.aliasIndex();
-      // A known-but-ambiguous form stops the walk: the address is real, we just
-      // cannot tell which district it is. Falling through to a shorter prefix
-      // would drop a 段 or 路 token and alias onto an unrelated street.
+      // Ambiguous but known: stop rather than retry a shorter prefix, which would
+      // drop a 段 token and alias onto an unrelated street of the same name.
       if (!alias.has(key)) continue;
       const canonical = alias.get(key);
       if (canonical) addr.tokens.splice(0, i, ...tokenize(canonical));

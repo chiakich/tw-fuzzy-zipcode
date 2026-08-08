@@ -65,11 +65,8 @@ test('never contradicts the Python reference', () => {
   // moskytw/zipcodetw Python package's Directory.find() over ~88k queries
   // stride-sampled across the full 2102_01 dataset, plus manual edge cases.
   //
-  // The alias index (Directory.canonicalize) deliberately resolves addresses
-  // that the reference leaves coarse or unanswered, so equality is too strong:
-  // the invariant is that we only ever *refine* the reference answer. Any
-  // result that disagrees on a digit the reference already committed to is a
-  // regression.
+  // canonicalize() resolves addresses the reference leaves coarse, so equality
+  // is too strong: we may only refine an answer, never contradict one.
   const dir = getDirectory();
   const lines = readFileSync(fixturePath, 'utf8').split('\n').filter(Boolean);
   let regressions = 0;
@@ -94,13 +91,12 @@ test('never contradicts the Python reference', () => {
 });
 
 test('resolves addresses that omit the city, the district, or both', () => {
-  // 溪尾街 exists only in 新北市三重區; 27巷 falls in the 單 71號以下 rule.
-  assert.equal(find('新北市三重區溪尾街27巷1號'), '241062');
-  assert.equal(find('新北市溪尾街27巷1號'), '241062');
-  assert.equal(find('三重區溪尾街27巷1號'), '241062');
-  assert.equal(find('溪尾街27巷1號'), '241062');
+  assert.equal(find('臺北市中山區松江路100號'), '104091');
+  assert.equal(find('臺北市松江路100號'), '104091');
+  assert.equal(find('中山區松江路100號'), '104091');
+  assert.equal(find('松江路100號'), '104091');
 
-  // 臺北市中華路二段 spans 中正區 and 萬華區: stay coarse rather than guess,
-  // and in particular do not fall back onto 士林區中華路 by dropping 二段.
+  // 中華路二段 spans 中正區 and 萬華區: stay coarse rather than guess, and do
+  // not drop 二段 to fall back onto 士林區中華路.
   assert.equal(find('臺北市中華路二段'), '');
 });

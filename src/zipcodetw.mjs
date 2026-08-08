@@ -229,40 +229,104 @@ class MapStore {
   }
 }
 
-// Sorted key/value rows flattened into one string, addressed by offset. The
+// A Uint16Array views memory in the platform's byte order, so the matching
+// decoder label is whatever that order is. Every JS runtime in practice is
+// little-endian; the big-endian branch keeps a Node build on s390x honest
+// rather than silently byte-swapping every character.
+const UTF16_LABEL =
+  new Uint8Array(new Uint16Array([1]).buffer)[0] === 1 ? 'utf-16le' : 'utf-16be';
+
+// ignoreBOM, or a leading U+FEFF would be eaten rather than stored.
+/** @type {(units: Uint16Array) => string} */
+const decodeUtf16 = (units) =>
+  units.length === 0 ? '' : new TextDecoder(UTF16_LABEL, { ignoreBOM: true }).decode(units);
+
+// Counts rows and characters without reconstructing a single key: a front-coded
+// row states its shared-prefix length, so the key's length is known from the
+// header plus the suffix width. This is what makes the second pass affordable.
+/**
+ * @param {string} text
+ * @returns {{ count: number, keyChars: number, valChars: number }}
+ */
+function measureFrontCoded(text) {
+  let count = 0, keyChars = 0, valChars = 0, pos = 0;
+  while (pos < text.length) {
+    let end = text.indexOf('\n', pos);
+    if (end < 0) end = text.length;
+    const t1 = text.indexOf('\t', pos);
+    const t2 = text.indexOf('\t', t1 + 1);
+    keyChars += parseInt(text.slice(pos, t1), 16) + (t2 - t1 - 1);
+    valChars += end - t2 - 1;
+    count += 1;
+    pos = end + 1;
+  }
+  return { count, keyChars, valChars };
+}
+
+// Sorted key/value rows flattened into two strings, addressed by offset. The
 // packer emits front-coded rows in sorted order and every key is BMP-only, so
 // charCodeAt order matches the order the rows were written in.
+//
+// Built in two passes over the text. Materialising the rows as ~200k strings
+// and joining them costs ~3x the transient memory of decoding twice, because
+// this way the shared prefix is copied inside the buffer that already holds it
+// and no intermediate string is ever allocated.
 class PackedTable {
   /** @param {string} tsv */
   constructor(tsv) {
-    /** @type {string[]} */ const keys = [];
-    /** @type {string[]} */ const vals = [];
-    /** @type {string | null} */
-    let prev = null;
-    decodeFrontCoded(tsv, (k, v) => {
-      if (prev !== null && prev >= k) {
-        throw new Error(`Postal data is not sorted at ${JSON.stringify(k)}; binary search needs sorted keys.`);
-      }
-      prev = k;
-      keys.push(k);
-      vals.push(v);
-    });
-
-    this.count = keys.length;
+    const { count, keyChars, valChars } = measureFrontCoded(tsv);
+    this.count = count;
     /** @type {Int32Array} start of each key, plus a terminating bound */
-    this.keyOffsets = new Int32Array(this.count + 1);
+    this.keyOffsets = new Int32Array(count + 1);
     /** @type {Int32Array} start of each value, plus a terminating bound */
-    this.valOffsets = new Int32Array(this.count + 1);
+    this.valOffsets = new Int32Array(count + 1);
 
-    let at = 0;
-    for (let i = 0; i < this.count; i++) { this.keyOffsets[i] = at; at += keys[i].length; }
-    this.keyOffsets[this.count] = at;
-    for (let i = 0; i < this.count; i++) { this.valOffsets[i] = at; at += vals[i].length; }
-    this.valOffsets[this.count] = at;
+    const keyUnits = new Uint16Array(keyChars);
+    const valUnits = new Uint16Array(valChars);
 
-    // The intermediate arrays die here; only the blob and the offsets survive.
+    let i = 0, keyAt = 0, valAt = 0, pos = 0, prevAt = 0, prevLen = -1;
+    while (pos < tsv.length) {
+      let end = tsv.indexOf('\n', pos);
+      if (end < 0) end = tsv.length;
+      const t1 = tsv.indexOf('\t', pos);
+      const t2 = tsv.indexOf('\t', t1 + 1);
+      const shared = parseInt(tsv.slice(pos, t1), 16);
+
+      this.keyOffsets[i] = keyAt;
+      // The shared prefix is already sitting at the previous key's offset.
+      if (shared > 0) keyUnits.copyWithin(keyAt, prevAt, prevAt + shared);
+      let write = keyAt + shared;
+      for (let s = t1 + 1; s < t2; s++) keyUnits[write++] = tsv.charCodeAt(s);
+      const len = write - keyAt;
+
+      // Strictly ascending, checked in O(1): the rows agree on `shared` chars,
+      // so the first difference is at that index — or one key ran out there.
+      if (prevLen >= 0) {
+        const ordered = shared >= prevLen
+          ? len > prevLen
+          : len > shared && keyUnits[keyAt + shared] > keyUnits[prevAt + shared];
+        if (!ordered) {
+          throw new Error(`Postal data is not sorted at row ${i}; binary search needs ascending keys.`);
+        }
+      }
+
+      this.valOffsets[i] = valAt;
+      for (let s = t2 + 1; s < end; s++) valUnits[valAt++] = tsv.charCodeAt(s);
+
+      prevAt = keyAt;
+      prevLen = len;
+      keyAt = write;
+      i += 1;
+      pos = end + 1;
+    }
+    this.keyOffsets[count] = keyAt;
+    this.valOffsets[count] = valAt;
+
+    // The buffers die here; only the two blobs and the offsets survive.
     /** @type {string} */
-    this.blob = keys.join('') + vals.join('');
+    this.keyBlob = decodeUtf16(keyUnits);
+    /** @type {string} */
+    this.valBlob = decodeUtf16(valUnits);
   }
 
   // Compares blob[start, end) against key without slicing it out first —
@@ -277,7 +341,7 @@ class PackedTable {
     const len = this.keyOffsets[index + 1] - start;
     const shorter = len < key.length ? len : key.length;
     for (let i = 0; i < shorter; i++) {
-      const diff = this.blob.charCodeAt(start + i) - key.charCodeAt(i);
+      const diff = this.keyBlob.charCodeAt(start + i) - key.charCodeAt(i);
       if (diff !== 0) return diff;
     }
     return len - key.length;
@@ -304,13 +368,13 @@ class PackedTable {
    */
   get(key) {
     const i = this.indexOf(key);
-    return i < 0 ? undefined : this.blob.slice(this.valOffsets[i], this.valOffsets[i + 1]);
+    return i < 0 ? undefined : this.valBlob.slice(this.valOffsets[i], this.valOffsets[i + 1]);
   }
 
   /** @returns {IterableIterator<string>} */
   *keys() {
     for (let i = 0; i < this.count; i++) {
-      yield this.blob.slice(this.keyOffsets[i], this.keyOffsets[i + 1]);
+      yield this.keyBlob.slice(this.keyOffsets[i], this.keyOffsets[i + 1]);
     }
   }
 }

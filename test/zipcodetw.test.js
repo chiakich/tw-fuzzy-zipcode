@@ -122,6 +122,29 @@ test('the packed store answers identically to the map store', () => {
   assert.deepEqual(packedKeys, mapKeys);
 });
 
+test('the packed store rejects data binary search cannot handle', () => {
+  // Front-coded rows are <sharedPrefixLenHex>\t<suffix>\t<value>. Unsorted keys
+  // would not throw, they would silently return wrong answers, so the build
+  // checks ordering as it writes.
+  const rows = (...lines) => lines.join('\n');
+  const build = (gradualTsv) =>
+    new Directory({ gradualTsv, preciseTsv: '0\t臺北市\t', storage: 'packed' });
+
+  assert.doesNotThrow(() => build(rows('0\t臺北市\tA', '3\t信義區\tB', '0\t高雄市\tC')));
+  for (const [label, tsv] of [
+    ['duplicate key', rows('0\t臺北市\tA', '3\t\tB')],
+    ['descending', rows('0\t高雄市\tA', '0\t臺北市\tB')],
+    ['proper prefix of the row before', rows('0\t臺北市信義區\tA', '3\t\tB')],
+  ]) {
+    assert.throws(() => build(tsv), /not sorted/, label);
+  }
+
+  // The blobs are decoded from UTF-16 code units; a BOM-stripping decoder would
+  // swallow a literal U+FEFF instead of storing it.
+  const dir = build(rows('0\t臺北市﻿路\t100'));
+  assert.deepEqual([...dir.store.gradual.keys()], ['臺北市﻿路']);
+});
+
 test('resolves addresses that omit the city, the district, or both', () => {
   assert.equal(find('臺北市中山區松江路100號'), '104091');
   assert.equal(find('臺北市松江路100號'), '104091');

@@ -7,6 +7,7 @@ const clearButton = document.querySelector('.clear-button');
 const suggestions = document.querySelector('#suggestions');
 
 const RECENT_ADDRESSES_KEY = 'tw-fuzzy-zipcode.recent-addresses';
+const QUERY_PARAM = 'q';
 const exampleAddresses = ['臺北市信義區市府路1號', '松山區', '台北市秀山街'];
 
 let directory;
@@ -20,8 +21,18 @@ async function loadDemoDirectory() {
   });
 }
 
+// Keeps the address in the URL so a lookup can be linked or shared. replaceState,
+// not pushState: typing should not fill the back button with every keystroke.
+function syncQueryParam(address) {
+  const url = new URL(location.href);
+  if (address) url.searchParams.set(QUERY_PARAM, address);
+  else url.searchParams.delete(QUERY_PARAM);
+  history.replaceState(null, '', url);
+}
+
 function showResult(address) {
   const zipcode = directory.find(address);
+  syncQueryParam(address);
   result.hidden = false;
   result.replaceChildren();
   const message = document.createElement('p');
@@ -169,10 +180,17 @@ clearButton.addEventListener('click', () => {
   clearTimeout(debounceTimer);
   input.value = '';
   result.hidden = true;
+  syncQueryParam('');
   updateClearButton();
   input.focus();
   showSuggestions();
 });
+
+const sharedAddress = new URLSearchParams(location.search).get(QUERY_PARAM);
+if (sharedAddress) {
+  input.value = sharedAddress;
+  updateClearButton();
+}
 
 loadDemoDirectory().then(() => {
   scheduleLookup();

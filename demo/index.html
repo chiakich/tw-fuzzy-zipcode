@@ -15,9 +15,14 @@
     <meta property="og:locale" content="zh_TW" />
     <meta property="og:title" content="台灣郵遞區號查詢 - 輸入地址即時查 3+3 郵遞區號" />
     <meta property="og:description" content="貼上完整或部分的台灣地址，立即查出中華郵政 3+3 郵遞區號。可省略縣市或行政區，全程在瀏覽器端運算，地址不會上傳。" />
-    <meta name="twitter:card" content="summary" />
+    <meta property="og:image" content="https://zipcode.chiaki.ch/demo/og.png" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:alt" content="台灣郵遞區號查詢：輸入「臺北市信義區市府路1號」得到 110204" />
+    <meta name="twitter:card" content="summary_large_image" />
     <meta name="twitter:title" content="台灣郵遞區號查詢 - 輸入地址即時查 3+3 郵遞區號" />
     <meta name="twitter:description" content="貼上完整或部分的台灣地址，立即查出中華郵政 3+3 郵遞區號。可省略縣市或行政區，全程在瀏覽器端運算，地址不會上傳。" />
+    <meta name="twitter:image" content="https://zipcode.chiaki.ch/demo/og.png" />
 
     <!-- Inlined so it resolves the same whether the page is served at / or /demo/. -->
     <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%234c6ef5'/%3E%3Ctext x='16' y='22' font-family='system-ui,sans-serif' font-size='17' font-weight='700' fill='%23fff' text-anchor='middle'%3E%E9%83%B5%3C/text%3E%3C/svg%3E" />
@@ -36,6 +41,14 @@
         "isAccessibleForFree": true,
         "offers": { "@type": "Offer", "price": "0", "priceCurrency": "TWD" },
         "author": { "@type": "Person", "name": "涼風千秋", "url": "https://chiaki.ch/profile" },
+        "potentialAction": {
+          "@type": "SearchAction",
+          "target": {
+            "@type": "EntryPoint",
+            "urlTemplate": "https://zipcode.chiaki.ch/?q={search_term_string}"
+          },
+          "query-input": "required name=search_term_string"
+        },
         "sourceOrganization": {
           "@type": "Organization",
           "name": "中華郵政",

@@ -12,13 +12,23 @@
     <main>
       <section class="search-panel" aria-labelledby="page-title">
         <h1 id="page-title">台灣郵遞區號查詢</h1>
-        <p class="description">輸入完整或部分地址，會自動查詢對應郵遞區號。</p>
+        <p class="description">輸入地址查詢郵遞區號</p>
 
         <div class="search-area">
           <form id="search-form" novalidate>
             <div class="search-box">
-              <svg aria-hidden="true" viewBox="0 0 24 24"><path d="m21 21-4.35-4.35m2.35-5.15a7.5 7.5 0 1 1-15 0 7.5 7.5 0 0 1 15 0Z" /></svg>
-              <input id="address" name="address" type="search" aria-label="輸入地址" placeholder="例如：臺北市信義區市府路1號" autocomplete="street-address" enterkeyhint="search" />
+              <svg aria-hidden="true" viewBox="0 0 24 24">
+                <path d="m21 21-4.35-4.35m2.35-5.15a7.5 7.5 0 1 1-15 0 7.5 7.5 0 0 1 15 0Z" />
+              </svg>
+              <input
+                id="address"
+                name="address"
+                type="search"
+                aria-label="輸入地址"
+                placeholder="例如：臺北市信義區市府路1號"
+                autocomplete="street-address"
+                enterkeyhint="search"
+              />
               <button class="clear-button" type="button" aria-label="清除地址" hidden>
                 <svg aria-hidden="true" viewBox="0 0 24 24"><path d="m6 6 12 12M18 6 6 18" /></svg>
               </button>

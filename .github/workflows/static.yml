@@ -40,6 +40,7 @@ jobs:
           cp -R src _site/src
           cp -R data _site/data
           touch _site/.nojekyll
+          printf 'zipcode.chiaki.ch' > _site/CNAME
           printf '<meta http-equiv="refresh" content="0; url=./demo/">' > _site/index.html
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3

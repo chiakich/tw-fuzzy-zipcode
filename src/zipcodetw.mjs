@@ -244,6 +244,11 @@ export async function loadDirectory({ gradualUrl, preciseUrl, fetch: fetchImpl =
   return new Directory({ gradualTsv, preciseTsv });
 }
 
+// A lookup touches at most a few dozen roads, but the whole directory holds
+// ~80k rules that cost ~50MB to keep parsed. Bound the cache so a server seeing
+// diverse traffic keeps the hit rate without the footprint.
+const RULE_CACHE_MAX = 5000;
+
 export class Directory {
   /** @param {DirectoryData} data */
   constructor({ gradualTsv, preciseTsv }) {
@@ -251,18 +256,58 @@ export class Directory {
     this.gradual = new Map();
     decodeFrontCoded(gradualTsv, (k, v) => this.gradual.set(k, v));
 
-    /** @type {Map<string, [ruleStr: string, zipcode: string][]>} */
+    // Values stay as the raw encoded string until a lookup reaches the key;
+    // splitting all 44k of them up front costs more than most callers ever use.
+    // See preciseRules() for the decoded shape.
+    /** @type {Map<string, string | [ruleStr: string, zipcode: string][]>} */
     this.precise = new Map();
-    decodeFrontCoded(preciseTsv, (k, v) => {
-      // Rule strings were stored as suffixes of the (normalized) address key.
-      this.precise.set(k, v === '' ? [] : v.split(RS).map((r) => {
-        const i = r.indexOf(US);
-        return [k + r.slice(0, i), r.slice(i + 1)];
-      }));
-    });
+    decodeFrontCoded(preciseTsv, (k, v) => this.precise.set(k, v));
 
     /** @type {Map<string, string | null> | null} built on first miss, see aliasIndex() */
     this.alias = null;
+
+    /** @type {Map<string, Rule>} insertion-ordered, evicted oldest-first */
+    this.ruleCache = new Map();
+  }
+
+  // Rules are immutable and match() only reads, so one parse per string is
+  // enough — rebuilding them per lookup dominated the hot path.
+  /**
+   * @param {string} ruleStr
+   * @returns {Rule}
+   */
+  rule(ruleStr) {
+    const cached = this.ruleCache.get(ruleStr);
+    if (cached !== undefined) {
+      // Re-insert so eviction sees it as recently used.
+      this.ruleCache.delete(ruleStr);
+      this.ruleCache.set(ruleStr, cached);
+      return cached;
+    }
+    const built = new Rule(ruleStr);
+    if (this.ruleCache.size >= RULE_CACHE_MAX) {
+      this.ruleCache.delete(/** @type {string} */ (this.ruleCache.keys().next().value));
+    }
+    this.ruleCache.set(ruleStr, built);
+    return built;
+  }
+
+  // Decodes a precise entry on first use and memoises it in place.
+  /**
+   * @param {string} key
+   * @returns {[ruleStr: string, zipcode: string][]}
+   */
+  preciseRules(key) {
+    const entry = this.precise.get(key);
+    if (entry === undefined) return [];
+    if (typeof entry !== 'string') return entry;
+    // Rule strings were stored as suffixes of the (normalized) address key.
+    const decoded = entry === '' ? [] : entry.split(RS).map((r) => {
+      const i = r.indexOf(US);
+      return /** @type {[string, string]} */ ([key + r.slice(0, i), r.slice(i + 1)]);
+    });
+    this.precise.set(key, decoded);
+    return decoded;
   }
 
   // 臺北市松江路 / 中山區松江路 / 松江路 -> 臺北市中山區松江路; null when the
@@ -320,7 +365,7 @@ export class Directory {
 
     for (let i = startLen; i > 0; i--) {
       const key = addr.flat(i);
-      let rzpairs = this.precise.get(key) ?? [];
+      let rzpairs = this.preciseRules(key);
 
       // '' in '村里' is True in Python; ''.includes-style check keeps that.
       if (
@@ -336,11 +381,11 @@ export class Directory {
         } else {
           addr.tokens.splice(2, 1);
         }
-        rzpairs = this.precise.get(addr.flat(3)) ?? [];
+        rzpairs = this.preciseRules(addr.flat(3));
       }
 
       for (const [ruleStr, zipcode] of rzpairs) {
-        if (new Rule(ruleStr).match(addr)) {
+        if (this.rule(ruleStr).match(addr)) {
           return { zipcode, source: 'precise', resolution: 'six-digit' };
         }
       }

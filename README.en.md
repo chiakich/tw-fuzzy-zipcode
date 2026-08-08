@@ -1,6 +1,6 @@
 # tw-fuzzy-zipcode
 
-[繁體中文](README.md)
+[繁體中文](README.md) · [Live demo](https://zipcode.chiaki.ch/)
 
 Dependency-free JavaScript lookup for Taiwan ZIP codes from raw, unstructured addresses. It handles complete, partial, or out-of-order addresses and common variants such as 台／臺, full-width characters, and Chinese numerals. Everything runs client-side: no server, WASM, or SQLite required.
 

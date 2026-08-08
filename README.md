@@ -1,6 +1,6 @@
 # tw-fuzzy-zipcode
 
-[English](README.en.md)
+[English](README.en.md) · [線上 Demo](https://zipcode.chiaki.ch/)
 
 從未拆欄位的台灣地址，模糊查詢郵遞區號的無相依 JavaScript 套件。它可處理完整、部分或順序不完整的地址，並支援「台／臺」、全半形與中文數字等常見寫法；所有查詢都在用戶端完成，不需要伺服器、WASM 或 SQLite。
 

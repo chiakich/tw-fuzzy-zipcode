@@ -47,6 +47,24 @@ jobs:
           sed 's|"\./style\.css"|"./demo/style.css"|; s|"\./app\.js"|"./demo/app.js"|' \
             demo/index.html > _site/index.html
           printf '<meta http-equiv="refresh" content="0; url=/">' > _site/demo/index.html
+          # The bundle under src/ and data/ is ~4MB of machine-readable index with
+          # nothing to rank for, so keep crawlers on the one page that matters.
+          cat > _site/robots.txt <<'ROBOTS'
+          User-agent: *
+          Allow: /
+          Disallow: /data/
+          Disallow: /src/
+          Sitemap: https://zipcode.chiaki.ch/sitemap.xml
+          ROBOTS
+          cat > _site/sitemap.xml <<SITEMAP
+          <?xml version="1.0" encoding="UTF-8"?>
+          <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+            <url>
+              <loc>https://zipcode.chiaki.ch/</loc>
+              <lastmod>$(date -u +%F)</lastmod>
+            </url>
+          </urlset>
+          SITEMAP
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
         with:

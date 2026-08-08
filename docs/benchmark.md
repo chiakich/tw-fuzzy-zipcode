@@ -1,130 +1,70 @@
-# Benchmark
+# 效能量測
 
-Numbers below were produced by [`scripts/bench.mjs`](../scripts/bench.mjs):
+以下數字由 [`scripts/bench.mjs`](../scripts/bench.mjs) 產生：
 
 ```bash
 npm run bench
 ```
 
-`--expose-gc` matters. Without it the memory figures include whatever the
-collector has not got around to yet.
+量測環境：Node v22.16.0、Apple M3 Pro（12 核）。資料集為中華郵政 3+3 郵遞區號，含 162,470 筆漸進式地址、44,635 筆精確地址與 79,845 條門牌規則。
 
-Environment: Node v22.16.0, Apple M3 Pro (12 cores). Dataset: 中華郵政 3+3
-郵遞區號, 162,470 gradual rows and 44,635 precise rows holding 79,845 rules.
+## 結果
 
-## Results
+我們有兩種版本的實作：
 
-Each backend is measured in its own process — see [Methodology](#methodology).
+| 索引實作               | 建立索引 | 穩態記憶體 | 峰值 RSS | `find()`      | `lookup()`    |
+| ---------------------- | -------- | ---------- | -------- | ------------- | ------------- |
+| `map`（Node 預設）     | 66 ms    | 21.50 MB   | 123 MB   | 517,974 次/秒 | 557,462 次/秒 |
+| `packed`（瀏覽器預設） | 36 ms    | 5.30 MB    | 77 MB    | 461,440 次/秒 | 453,961 次/秒 |
 
-| storage | build | steady memory | peak RSS | `find()` | `lookup()` |
-| --- | --- | --- | --- | --- | --- |
-| `map` (Node default) | 66 ms | 21.50 MB | 123 MB | 517,974 ops/s | 557,462 ops/s |
-| `packed` (browser default) | 36 ms | 5.30 MB | 77 MB | 461,440 ops/s | 453,961 ops/s |
+測試套件會將 90,950 筆查詢分別餵給兩種實作，並斷言零差異。兩種實作只差在資料如何存放：
 
-Both answer identically; the test suite replays 90,950 queries through each and
-asserts zero divergence. They differ only in how the two tables are held:
+- **`map`**：使用雜湊 `Map`。查表最快，記憶體最高。
+- **`packed`**：把排序後的資料依欄位各攤平成一條字串，另存 `Int32Array` 偏移量，以二分搜尋查找。記憶體降為約四分之一，換取約 11% 的吞吐量。
 
-- **`map`** keeps hashed `Map`s. Fastest probes, highest footprint.
-- **`packed`** flattens the sorted rows into one string per column plus
-  `Int32Array` offsets, and binary-searches them. 4x less memory for ~11% fewer
-  queries per second.
+`src/node.mjs` 選用 `map`。
+`loadDirectory()` 與直接 `new Directory()` 則預設 `packed`。
+因瀏覽器一次工作階段只查幾筆、但在意佔用，適合 `packed`；伺服器有記憶體餘裕、要的是吞吐量，適合 `map`。
 
-`src/node.mjs` selects `map`; `loadDirectory()` and a bare `new Directory()`
-default to `packed`. Override explicitly if the default is wrong for your case:
+若預設不符需求，可明確指定：
 
 ```js
 new Directory({ gradualTsv, preciseTsv, storage: 'map' })
 ```
 
-Rules of thumb: a browser session runs a handful of queries and cares about
-footprint, so `packed` wins. A busy server has the headroom and wants the
-throughput, so `map` wins.
+## 正確性
 
-### Reading the memory numbers
+`test/fixtures/golden_find.tsv` 收錄 90,950 筆查詢，跨整份資料集等距抽樣，每筆都標註了上游 Python 版 [moskytw/zipcodetw](https://github.com/moskytw/zipcodetw) 的答案，另加人工邊界案例。
 
-`process.memoryUsage().heapUsed` **excludes typed-array backing stores**, which
-is exactly where `packed` keeps its offset arrays. Measured that way it reports
-3.65 MB and understates the real cost by the 1.66 MB of offsets. The table adds
-`heapUsed + arrayBuffers`, giving 5.30 MB.
+| 結果               | 筆數   | 佔比   |
+| ------------------ | ------ | ------ |
+| 與參考實作完全相同 | 90,596 | 99.61% |
+| 解得更細           | 354    | 0.39%  |
+| **與參考實作牴觸** | **0**  | **0%** |
 
-Peak RSS is the transient high-water mark for the whole process during
-construction, not steady state. It is the number that decides whether a low-end
-mobile browser survives loading the directory at all. Roughly 39 MB of it is
-bare Node before any of this package is loaded, and a further ~13 MB is the
-4.3 MB of source text held as UTF-16; the rest is decoding churn. Treat it as
-comparable between the two rows, not as an absolute cost of the directory.
+「解得更細」是因為 `canonicalize()` 會處理 Python 版未處理的省略寫法，例如只寫出全國唯一的路名如 `松江路100號` 時，我們給出 `104091`，而 Python 版只到 3 碼。
 
-## Accuracy
+完全相同的案例中有 1,124 筆是雙方都正確回傳空值，屬於資訊不足或有歧義的輸入（例如 `臺北市中華路二段` 橫跨中正區與萬華區，此時維持粗略而不猜測）。
 
-For a fuzzy matcher this matters more than throughput, and it is the axis a
-speed-only benchmark hides.
+## 與 `tw-zip` 的比較
 
-`test/fixtures/golden_find.tsv` holds 90,950 queries stride-sampled across the
-full dataset, each labelled with the answer from the upstream Python
-[moskytw/zipcodetw](https://github.com/moskytw/zipcodetw), plus manual edge
-cases.
+[`tw-zip`](https://github.com/supra126/tw-zip) 也公布了自己的 benchmark，但實際上數字不能直接比較。`tw-zip` 接收的是已經拆好欄位的結構化地址再做雜湊查表，本套件接收的是一整串未拆欄位的文字，必須先正規化、切分，再逐條比對門牌規則。
 
-| outcome | count | share |
-| --- | --- | --- |
-| identical to the reference | 90,596 | 99.61% |
-| refined (reference coarse, we resolve further) | 354 | 0.39% |
-| **contradicts the reference** | **0** | **0%** |
+唯一同性質的是 `tw-zip` 的路名搜尋：
 
-"Refined" is not a disagreement. `canonicalize()` repairs abbreviated forms the
-reference leaves unresolved — `松江路100號` yields `104091` where the reference
-stops at a 3-digit answer. The suite therefore asserts a one-way property: we
-may only ever *extend* a reference answer, never contradict one.
+| 情境               | `tw-zip`         | 本套件           |
+| ------------------ | ---------------- | ---------------- |
+| 未指定縣市／行政區 | 約 1,200 次/秒   | 約 461,000 次/秒 |
+| 指定縣市           | 約 52,000 次/秒  | 約 461,000 次/秒 |
+| 指定縣市 + 行政區  | 約 650,000 次/秒 | 約 461,000 次/秒 |
 
-1,124 of the exact matches are queries where both correctly return nothing
-(ambiguous input such as `臺北市中華路二段`, which spans 中正區 and 萬華區).
+由此可見，本套件在未結構化輸入上快得多，在呼叫端已完成拆欄位時則較慢。因此若你的資料已經分成獨立欄位，請優先考慮 `tw-zip`。並且因 `tw-zip` 可以只發布約 5 KB 的三碼版 bundle，本套件則一律需要完整資料（gzip 約 1.2 MB），對只需要 3 碼的情境而言，這是實質的缺點。
 
-## Comparison with `@simoko/tw-zip`
+## 量測方法
 
-[`tw-zip`](https://github.com/supra126/tw-zip) publishes its own benchmark. Most
-of its figures are **not comparable to these**, and it is worth being precise
-about why rather than putting the two tables side by side.
+- 兩種索引實作需在各自獨立的子行程中量測。若擠在同一個行程裡，記憶體數字會失去意義：量第二種的基準線時，第一個目錄往往尚未被回收。
+- 暖身 3,000 次後，量測 20,000 次；查詢樣本共 8 筆，涵蓋完整地址、`台`／`臺` 異寫、含 `段` 的路名，以及需要 `canonicalize()` 還原的省略寫法。
+- 記憶體在強制執行兩次 GC 後取樣。
+- 峰值 RSS 取自 `process.resourceUsage().maxRSS`，在建立索引完成後、查詢迴圈開始前讀取。
 
-`tw-zip` takes address *fields* that are already split — city, district, road —
-and hashes them. Its 10–23M ops/sec numbers are hash-map lookups on structured
-input. This package takes one unsplit string and has to tokenize, normalize, and
-match rules against it. Different problems; the throughput figures do not mean
-the same thing.
-
-The one genuinely comparable path is `tw-zip`'s road-name search:
-
-| scenario | `tw-zip` | this package |
-| --- | --- | --- |
-| no city/district given | ~1,200 ops/s | ~461,000 ops/s |
-| city given | ~52,000 ops/s | ~461,000 ops/s |
-| city + district given | ~650,000 ops/s | ~461,000 ops/s |
-
-Our figure does not move because scoping is not something the caller does — the
-address string is parsed as-is. `tw-zip`'s own documentation stresses narrowing
-by city/district, which is precisely the information a pasted address has not
-been split into yet.
-
-So: this package is far faster on unstructured input and slower once the caller
-has already done the splitting. That matches the guidance in the README — if
-your data is already in separate fields, prefer `tw-zip`.
-
-Not measured here: `tw-zip` can ship a ~5 KB 3-digit-only bundle. This package
-always needs its full tables (1.2 MB gzipped), which is a real disadvantage for
-a browser that only needs 3-digit resolution.
-
-## Methodology
-
-- Both backends run in **separate child processes**. Measuring them in one
-  process makes the memory numbers meaningless: the first directory is still
-  reachable when the second one's baseline is taken, so its later collection
-  shows up as a *negative* delta for whichever ran second.
-- 3,000 warmup iterations, then 20,000 measured, over 8 queries spanning full
-  addresses, `台`/`臺` variants, `段` tokens, and abbreviated forms that exercise
-  `canonicalize()`.
-- Memory is sampled after two forced GCs.
-- Peak RSS is `process.resourceUsage().maxRSS`, captured immediately after
-  construction and before the query loop.
-
-Caveats worth stating: this is a single-machine, single-run measurement on an
-M3 Pro. Throughput varies by a few percent between runs, and the query mix is
-deliberately favourable in one respect — all 8 addresses resolve. A workload of
-mostly unresolvable junk would spend more time walking prefixes.
+附註：這是單一機器、單次執行的量測，機種為 M3 Pro。吞吐量在不同次執行之間會有數個百分點的浮動；此外查詢樣本以 8 筆地址全部都查得到結果的樂觀條件。若實際流量多為查不到的雜訊，會有更多時間花在逐段回退比對上。

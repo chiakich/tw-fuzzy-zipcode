@@ -84,13 +84,15 @@ The implementation is `.mjs` — what is published is the source, with no build 
 
 The matcher compares address fragments and house-number rules in order, including odd/even, above, below, and range rules. The bundled June 2026 dataset contains 79,845 precise rules and 162,470 gradual address entries.
 
-| Metric             | Result                                                                                                                     |
-| ------------------ | --------------------------------------------------------------------------------------------------------------------------- |
-| Transfer size      | About 0.79 MB Brotli; 1.20 MB gzip                                                                                        |
-| Index build        | About 60 ms                                                                                                                |
-| Memory after load  | About 12–70 MB, depending on the index implementation                                                                     |
-| Lookup             | About 4–6 µs per lookup                                                                                                   |
-| Verification       | 90,950 differential queries against the Python reference; invalid 4-/5-digit intermediate prefixes are normalized to valid 3-digit codes |
+| Metric            | Result                                                                                                                                   |
+| ----------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
+| Transfer size     | About 0.79 MB Brotli; 1.20 MB gzip                                                                                                       |
+| Index build       | About 36 ms in the browser; 66 ms on Node                                                                                                |
+| Memory after load | About 5.3 MB in the browser; 21.5 MB on Node                                                                                             |
+| Lookup            | About 1.9–2.2 µs per lookup                                                                                                              |
+| Verification      | 90,950 differential queries against the Python reference; invalid 4-/5-digit intermediate prefixes are normalized to valid 3-digit codes |
+
+For the two index implementations, the measurement method, and its caveats, see the [benchmark](docs/benchmark.md) (written in Chinese).
 
 ## Data source and license
 

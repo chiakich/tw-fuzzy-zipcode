@@ -1,6 +1,6 @@
 {
   "name": "tw-fuzzy-zipcode",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Fuzzy free-text Taiwan address -> ZIP code lookup — a dependency-free JS port of moskytw/zipcodetw. Runs entirely client-side.",
   "type": "module",
   "license": "MIT",

@@ -22,6 +22,8 @@ find('臺北市信義區');          // '110'
 find('臺北市');                // '' — no usable 3-digit ZIP code can be determined
 find('松山區');                // '105'
 find('台北市秀山街');          // '100005' — 台 is normalized to 臺
+find('新北市溪尾街27巷1號');  // '241062' — the city or the district may be omitted
+find('溪尾街27巷1號');        // '241062' — or both
 
 lookup('臺北市');
 // { zipcode: '1', source: 'gradual', resolution: 'prefix' }
@@ -35,8 +37,9 @@ Use `lookup(address)` when the UI needs the matching detail. It returns `null` o
 
 1. The input is normalized for 台／臺, full-width characters, and common Chinese numeral forms.
 2. The raw address is tokenized into city, district, road, lane, alley, house number, and related fragments.
-3. When sufficient detail is present, house-number rules for odd/even numbers, above, below, and ranges produce a 6-digit ZIP code.
-4. With less detail, a gradual address index produces a usable 3-digit ZIP code. If the match only identifies a broad prefix such as a city, `find()` returns an empty string and `lookup()` exposes the resolution instead.
+3. If the address omits the city or the district and the shortened form names exactly one road nationwide, the missing fragments are restored before matching continues. Forms that name several roads are left alone rather than guessed.
+4. When sufficient detail is present, house-number rules for odd/even numbers, above, below, and ranges produce a 6-digit ZIP code.
+5. With less detail, a gradual address index produces a usable 3-digit ZIP code. If the match only identifies a broad prefix such as a city, `find()` returns an empty string and `lookup()` exposes the resolution instead.
 
 ## Browser
 

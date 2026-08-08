@@ -146,6 +146,18 @@ function decodeFrontCoded(text, onRow) {
   }
 }
 
+// The largest prefix length that does not end inside a run of numbered tokens
+// (巷/弄/號/樓) — i.e. where the locality/road part of the address stops.
+function startLenOf(addr) {
+  let startLen = addr.tokens.length;
+  while (startLen >= 0) {
+    const p = addr.parse(startLen - 1);
+    if (p[0] === 0 && p[1] === 0) break;
+    startLen -= 1;
+  }
+  return startLen;
+}
+
 const gradualLookup = (zipcode) => {
   if (zipcode.length >= 6) {
     return { zipcode, source: 'gradual', resolution: 'six-digit' };
@@ -192,18 +204,60 @@ export class Directory {
         return [k + r.slice(0, i), r.slice(i + 1)];
       }));
     });
+
+    this.alias = null; // built on first miss, see aliasIndex()
+  }
+
+  // Maps abbreviated locality forms back to the canonical precise key:
+  // 新北市溪尾街 / 三重區溪尾街 / 溪尾街 -> 新北市三重區溪尾街. Forms that name
+  // more than one canonical address are recorded as null so they stay
+  // unresolved rather than resolving arbitrarily. Costs ~100ms over the whole
+  // index, so it is deferred until an address actually needs it.
+  aliasIndex() {
+    if (this.alias) return this.alias;
+    this.alias = new Map();
+    for (const key of this.precise.keys()) {
+      const tokens = tokenize(key);
+      if (tokens.length < 3) continue;
+      if (!'縣市'.includes(tokens[0][UNIT])) continue;
+      if (!'鄉鎮市區'.includes(tokens[1][UNIT])) continue;
+      for (const dropped of [[0], [1], [0, 1]]) {
+        const form = tokens
+          .filter((_, i) => !dropped.includes(i))
+          .map((t) => t.join(''))
+          .join('');
+        if (!this.alias.has(form)) this.alias.set(form, key);
+        else if (this.alias.get(form) !== key) this.alias.set(form, null);
+      }
+    }
+    return this.alias;
+  }
+
+  // The precise index is keyed by the full 縣市 + 鄉鎮市區 + 路名 form, but
+  // people routinely drop one or both locality tokens. The gradual index does
+  // carry those abbreviated keys, so lookup() would otherwise stop there and
+  // return a coarse prefix without ever consulting the rules. Splice the
+  // missing tokens back in when the abbreviation is unambiguous.
+  canonicalize(addr) {
+    for (let i = startLenOf(addr); i > 0; i--) {
+      const key = addr.flat(i);
+      if (this.precise.has(key)) return;
+      // A known-but-ambiguous form stops the walk: the address is real, we just
+      // cannot tell which district it is. Falling through to a shorter prefix
+      // would drop a 段 or 路 token and alias onto an unrelated street.
+      if (!this.aliasIndex().has(key)) continue;
+      const canonical = this.alias.get(key);
+      if (canonical) addr.tokens.splice(0, i, ...tokenize(canonical));
+      return;
+    }
   }
 
   lookup(addrStr) {
     const addr = new Address(addrStr);
-    let lenAddrTokens = addr.tokens.length;
+    this.canonicalize(addr);
 
-    let startLen = lenAddrTokens;
-    while (startLen >= 0) {
-      const p = addr.parse(startLen - 1);
-      if (p[0] === 0 && p[1] === 0) break;
-      startLen -= 1;
-    }
+    let lenAddrTokens = addr.tokens.length;
+    const startLen = startLenOf(addr);
 
     for (let i = startLen; i > 0; i--) {
       const key = addr.flat(i);

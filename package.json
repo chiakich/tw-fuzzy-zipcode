@@ -14,19 +14,26 @@
     "./browser": {
       "types": "./src/zipcodetw.d.ts",
       "default": "./src/zipcodetw.mjs"
+    },
+    "./translate": {
+      "types": "./src/translate.d.ts",
+      "default": "./src/translate.mjs"
     }
   },
   "files": [
     "src",
     "README.en.md",
     "data/gradual.tsv",
-    "data/precise.tsv"
+    "data/precise.tsv",
+    "data/road_en.tsv",
+    "data/district_en.tsv"
   ],
   "scripts": {
     "test": "npm run typecheck && node --test test/*.js",
     "bench": "node --expose-gc scripts/bench.mjs",
     "typecheck": "tsc --project tsconfig.json",
     "build": "python3 scripts/pack.py data/2606_01.csv data",
+    "build:en": "python3 scripts/pack_en.py data",
     "build:golden": "python3 scripts/build_golden_fixture.py data/2606_01.csv test/fixtures/golden_find.tsv"
   },
   "keywords": [

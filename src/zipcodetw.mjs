@@ -263,6 +263,9 @@ function measureFrontCoded(text) {
   return { count, keyChars, valChars };
 }
 
+// Exported for ./translate.mjs, which packs its two bilingual tables the same
+// way; it is shared internals rather than part of the lookup API.
+//
 // Sorted key/value rows flattened into two strings, addressed by offset. The
 // packer emits front-coded rows in sorted order and every key is BMP-only, so
 // charCodeAt order matches the order the rows were written in.
@@ -271,7 +274,7 @@ function measureFrontCoded(text) {
 // and joining them costs ~3x the transient memory of decoding twice, because
 // this way the shared prefix is copied inside the buffer that already holds it
 // and no intermediate string is ever allocated.
-class PackedTable {
+export class PackedTable {
   /** @param {string} tsv */
   constructor(tsv) {
     const { count, keyChars, valChars } = measureFrontCoded(tsv);
@@ -571,6 +574,18 @@ export class Directory {
       if (canonical) addr.tokens.splice(0, i, ...tokenize(canonical));
       return;
     }
+  }
+
+  // '松江路100號' -> '臺北市中山區松江路100號'. Left alone when the address
+  // names more than one place, or already names its city and district.
+  /**
+   * @param {string} addrStr
+   * @returns {string}
+   */
+  canonical(addrStr) {
+    const addr = new Address(addrStr);
+    this.canonicalize(addr);
+    return addr.flat();
   }
 
   /**

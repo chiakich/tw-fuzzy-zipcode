@@ -38,6 +38,19 @@ export interface LoadDirectoryOptions {
   fetch?: typeof globalThis.fetch;
 }
 
+/**
+ * Sorted key/value rows flattened into one string plus offset arrays, binary
+ * searched in place. Shared internals for ./translate.mjs, not part of the
+ * lookup API.
+ */
+export declare class PackedTable {
+  constructor(tsv: string);
+  readonly count: number;
+  get(key: string): string | undefined;
+  indexOf(key: string): number;
+  keys(): IterableIterator<string>;
+}
+
 export declare function normalize(address: string): string;
 export declare function tokenize(address: string): AddressToken[];
 
@@ -59,6 +72,8 @@ export declare class Directory {
   lookup(address: string): LookupResult | null;
   /** Returns only a usable 3- or 6-digit ZIP code; unresolved prefixes return an empty string. */
   find(address: string): string;
+  /** Restores an omitted county/city or district when the address names only one place. */
+  canonical(address: string): string;
 }
 
 /** Fetches both packaged data files and creates a browser-ready directory. */

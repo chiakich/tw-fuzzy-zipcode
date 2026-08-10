@@ -66,6 +66,56 @@ directory.find('臺北市信義區市府路1號') // '110204'
 
 資料檔會隨 npm 套件發布；請在建置流程中將它們複製到網站可存取的位置。
 
+### 英文地址翻譯
+
+`translate(address)` 會依中華郵政的書寫規則，把中文地址翻成英文並反轉語序：
+
+```js
+import { translate } from 'tw-fuzzy-zipcode'
+
+translate('臺北市信義區市府路1號').english
+// 'No. 1, Shifu Rd., Xinyi Dist., Taipei City 110204, Taiwan (R.O.C.)'
+translate('臺北市中正區忠孝東路一段1巷1弄1號1樓').english
+// '1F., No. 1, Aly. 1, Ln. 1, Sec. 1, Zhongxiao E. Rd., Zhongzheng Dist., Taipei City 100009, Taiwan (R.O.C.)'
+
+translate('臺北市中山區松江路100號')
+// {
+//   english: 'No. 100, Songjiang Rd., Zhongshan Dist., Taipei City 104091, Taiwan (R.O.C.)',
+//   parts: { city: 'Taipei City', district: 'Zhongshan Dist.',
+//            road: 'Songjiang Rd.', number: 'No. 100', zipcode: '104091' },
+//   untranslated: [],
+//   complete: true,
+// }
+```
+
+郵遞區號會自動查好一併帶入，也可用 `translate(address, { zipcode })` 自行指定，或用 `{ country: null }` 省略結尾的國名。若想自訂排版，`parts` 內是各欄位已經翻好的字串，可搭配 `formatEnglish(parts, country)` 重新組合。
+
+**這裡不做任何拼音推導。** 所有名稱都來自中華郵政的官方中英對照資料；查不到的名稱會原樣保留中文，並列在 `untranslated` 中，`complete` 則為 `false`：
+
+```js
+const { english, untranslated, complete } = translate('宜蘭縣礁溪鄉北宜路1號')
+// english: 'No. 1, 北宜路, Jiaoxi Township, Yilan County 262, Taiwan (R.O.C.)'
+// untranslated: ['北宜路'], complete: false
+```
+
+以套件內含的郵遞區號目錄實測，99.99% 的地址可以完全翻譯（44,635 筆中僅 6 筆未完成，且都是原始資料本身的異常列，例如塞在路名欄的「地下層」）。**寧可留中文，也不猜拼音** — 寄件人看不出猜錯的英文路名，但看得出中文。
+
+行政區同名時（例如四個縣市都有中正區）也一樣不猜：若地址其他部分不足以判斷是哪一個，該欄位就保留中文。
+
+瀏覽器同樣需要自行載入兩個資料檔：
+
+```js
+import { loadTranslator } from 'tw-fuzzy-zipcode/translate'
+
+const translator = await loadTranslator({
+  roadUrl: '/data/road_en.tsv',
+  districtUrl: '/data/district_en.tsv',
+})
+translator.translate('臺北市信義區市府路1號', { zipcode: '110204' }).english
+```
+
+瀏覽器版不會自動補上省略的縣市或行政區，也不會自動查郵遞區號；若需要這兩項，請先用 `Directory` 的 `canonical()` 與 `find()` 處理過再傳入。
+
 ## 比對方式
 
 1. 先正規化地址中的「台／臺」、全半形與常見中文數字寫法。
@@ -100,6 +150,21 @@ directory.find('臺北市信義區市府路1號') // '110204'
 
 中華郵政於「3+3 郵遞區號公開授權聲明」（2020-10-22）中授權以數位方式重製，並可於各種介面公開呈現 3+3 郵遞區號；使用時仍須遵守其軟體條款與第三人權利。本專案感謝並標示中華郵政為資料來源。
 
+英文翻譯所用的三個對照檔同樣來自中華郵政，依教育部「中文譯音使用原則」以漢語拼音譯寫：
+
+| 檔案 | 來源 | 內容 |
+| ---- | ---- | ---- |
+| `data/road_en.txt` | [中華郵政路街中英對照文字檔](https://data.gov.tw/dataset/152276) | 29,983 筆路街名稱中英對照 |
+| `data/county_en.xml` | [縣市鄉鎮中英對照檔](https://data.gov.tw/dataset/5949) | 371 筆鄉鎮市區、22 筆縣市中英對照 |
+| `data/village_en.csv` | [村里中英對照檔](https://www.post.gov.tw/post/internet/Postal/village.txt) | 8,521 筆村里與具名巷道中英對照 |
+| `data/road_en_extra.tsv` | 本專案手動維護 | 403 筆官方檔案未收錄的名稱 |
+
+前兩個檔案在政府資料開放平臺以「政府資料開放授權條款－第 1 版」發布。村里檔補上了路街檔沒有的 6,977 個名稱；兩檔衝突的 109 筆以較新的路街檔為準，被取代的多是漢語拼音之前的舊拼法。
+
+官方檔案落後於郵局自己的線上查詢系統（例如 `東彰南路` 線上查得到、下載檔完全沒有），因此 `data/road_en_extra.tsv` 以相同慣例手動補上這些名稱，並在打包時覆蓋官方值 — 重新下載官方資料不會蓋掉這些修正。
+
+`npm run build:en` 會把這四個檔案轉成 `data/road_en.tsv` 與 `data/district_en.tsv`。
+
 ## 開發與驗證
 
 專案不需要執行期相依套件。若要重建資料或更新測試基準，需安裝 Python 與原始 Python 參考套件：
@@ -108,6 +173,7 @@ directory.find('臺北市信義區市府路1號') // '110204'
 python3 scripts/dbf_to_csv.py rall1.dbf data/2606_01.csv
 pip install zipcodetw
 npm run build
+npm run build:en
 npm run build:golden
 npm run typecheck
 npm test

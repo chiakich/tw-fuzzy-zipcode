@@ -63,7 +63,7 @@ lookup('臺北市')
 
 ### 瀏覽器使用
 
-瀏覽器環境沒有 `fs`，Node 端自動處理的載入要自己來。`loadZipcode()` 會處理載入失敗並建立 `Zipcode`，它的方法與上一節的函式同名：
+瀏覽器環境沒有 `fs`，需要使用函數 `loadZipcode()` 載入對照表資料檔。函數會建立 `Zipcode`，它的方法與上一節的函式同名：
 
 ```js
 import { loadZipcode } from 'tw-fuzzy-zipcode/browser'
@@ -89,7 +89,7 @@ zip.find('基隆愛三路郵局第5號信箱') // '200900'
 | 信箱表   | `mailbox.tsv`                     | 46 KB  | 郵局名稱 → 郵遞區號＋英文局名 |
 | 中英對照 | `road_en.tsv` + `district_en.tsv` | 846 KB | 路街與行政區名稱 → 英文       |
 
-分成三份是因為它們互不相依，而且**多數人用不到全部**。門牌索引佔了 4.3 MB、是其他兩份加起來的近五倍，只想英譯或只想查信箱的人不該為它付流量；反過來只想查郵遞區號的人也不必載中英對照。三份的來源與更新頻率也各自不同（見[資料來源](#資料來源與授權)）。
+分成三份是因為它們互不相依，只想查郵遞區號的人也不必載中英對照。三份的來源與更新頻率也各自不同（見[資料來源](#資料來源與授權)）。
 
 沒有哪一份是「預設載入」的——瀏覽器端你載什麼就有什麼功能：
 
@@ -103,7 +103,7 @@ zip.find('基隆愛三路郵局第5號信箱') // '200900'
 
 ¹ 沒有它，`translate()` 仍可運作，但不會補齊省略的縣市／行政區、不會自動查郵遞區號，也不會交叉驗證路名（見[路名與地點的交叉驗證](#路名與地點的交叉驗證)）。Node 端因為本來就載了門牌索引，這三項預設全開。
 
-² 嚴格說信箱英譯不查中英對照表——英文局名整筆存在信箱表裡——但 `Translator` 的建構子本來就要求這兩個檔案，所以還是得載。
+² 嚴格來說信箱英文局名整筆存在信箱表裡，但分開有點麻煩。
 
 全部載齊長這樣：
 
@@ -125,7 +125,7 @@ const translator = await loadTranslator({
 })
 ```
 
-只要其中一份的話，三個入口分別是 `tw-fuzzy-zipcode/browser`（門牌＋信箱）、`tw-fuzzy-zipcode/mailbox`（只有信箱）、`tw-fuzzy-zipcode/translate`（只有中英對照）。分開的是**資料**：你只會下載自己載的那幾份 TSV。程式碼則有少量共用（`mailbox` 與 `translate` 都用到 `zipcodetw.mjs` 的 `PackedTable` 與 `normalize`），但那是幾 KB 的解碼與正規化邏輯，不是資料。
+只要其中一份的話，三個入口分別是 `tw-fuzzy-zipcode/browser`（門牌＋信箱）、`tw-fuzzy-zipcode/mailbox`（只有信箱）、`tw-fuzzy-zipcode/translate`（只有中英對照）。
 
 ```js
 import { loadMailbox } from 'tw-fuzzy-zipcode/mailbox'
@@ -134,11 +134,11 @@ const mailbox = await loadMailbox({ mailboxUrl: '/data/mailbox.tsv' })
 mailbox.find('基隆愛三路郵局第5號信箱') // '200900'
 ```
 
-### 已經知道地址形式時
+### 只查地址或者只查郵政信箱
 
-如果你的資料來源保證只有其中一種形式，可以跳過另一種的檢查：`findAddress()` / `lookupAddress()` 只查門牌，`findMailbox()` / `lookupMailbox()` 只查信箱。Node 端是同名函式，瀏覽器端是 `Zipcode` 上的同名方法。
+如果你的資料來源保證只有其中一種形式（純地址或者純郵政信箱），可以選用子函數：`findAddress()` / `lookupAddress()` 只查門牌，`findMailbox()` / `lookupMailbox()` 只查郵政信箱。Node 端是同名函式，瀏覽器端是 `Zipcode` 上的同名方法。
 
-不確定的話就用 `find()`。它在門牌地址上的額外成本落在量測雜訊裡（見 [`docs/benchmark.md`](docs/benchmark.md)），因為信箱比對在正規化之前就先用字尾否決了。
+不確定的話，因為我們有做字尾檢查的最佳化，用 `find()` 實際上額外的效能成本並不大（見 [`docs/benchmark.md`](docs/benchmark.md)）。
 
 ### 英文地址翻譯
 
@@ -282,9 +282,7 @@ translate('政大郵局第12號信箱').english
 | `data/mailbox.csv`    | [郵局專用信箱一覽表](https://data.gov.tw/dataset/27770)                                  | 1,278 筆局名、六碼郵遞區號與信箱狀態，每日更新           |
 | `data/mailbox_en.csv` | [同表的線上查詢頁](https://www.post.gov.tw/post/internet/SearchZone/index.jsp?ID=130111) | 899 筆英文局名，由 `npm run fetch:mailbox-en` 逐縣市抓取 |
 
-第一個檔案在政府資料開放平臺以「政府資料開放授權條款－第 1 版」發布。它的 `信箱英文名稱` 欄其實也有英文，但換行被拿掉了，局名會直接黏上縣市（`Taipei HanzhongTaipei City  10899Taiwan ( R.O.C.)`），切回來只能用猜的，而且對局名本身含縣市的兩筆（`Taipei City GovernmentTaipei City`）必定失手；那一欄嵌的還是 5 碼舊郵遞區號。線上查詢頁保留了 `<br>`，切分因此是精確的，號碼也是六碼。
-
-英文縣市名不採用該頁的寫法（它把屏東縣寫成 `Pingtung City`、金門縣寫成 `Jinmen County`），改由 `data/district_en.tsv` 推導，使信箱地址與同縣市的門牌地址輸出一致。
+該檔案在政府資料開放平臺以「政府資料開放授權條款－第 1 版」發布。
 
 `npm run build:mailbox` 會把這兩個檔案併成 `data/mailbox.tsv`。
 

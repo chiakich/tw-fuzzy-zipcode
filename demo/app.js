@@ -63,14 +63,26 @@ function syncQueryParam(address) {
 // The browser translator does neither of the two things the Node entry point
 // does for it: fill in an omitted city/district, and look the ZIP code up.
 // Mirror src/node.mjs so the demo matches the documented behaviour.
-function translateAddress(address) {
+//
+// `resolved` is the address as the library read it, which is what the result
+// shows rather than what was typed — 松江路100號 comes back as
+// 臺北市中山區松江路100號, and 台北市 as 臺北市.
+//
+// A box address is shown as typed instead. There is nothing to restore on one:
+// the office name either matches the table or it does not, and no city or
+// district gets filled in. Normalizing it for display would only mangle it,
+// since the table is keyed on 基隆愛3路郵局 and nobody writes that.
+function resolveAddress(address) {
   const stripped = stripAddressPrefix(address);
-  // A box address carries its own ZIP and English, and canonical() would read
-  // the office's name as a street; hand it straight over, as src/node.mjs does.
-  if (zip.mailbox.parse(stripped)) return translator.translate(stripped);
-  return translator.translate(zip.directory.canonical(stripped), {
-    zipcode: zip.findAddress(stripped),
-  });
+  const box = zip.mailbox.parse(stripped);
+  const resolved = box ? stripped.trim() : zip.directory.canonical(stripped);
+  return {
+    resolved,
+    zipcode: box ? box.zipcode : zip.findAddress(stripped),
+    translation: box
+      ? translator.translate(stripped)
+      : translator.translate(resolved, { zipcode: zip.findAddress(stripped) }),
+  };
 }
 
 // An empty `english` means the library declined to guess, and the reason is
@@ -128,8 +140,9 @@ function renderEnglish(translation) {
 }
 
 function showResult(address) {
-  const zipcode = zip.find(stripAddressPrefix(address));
-  const translation = translateAddress(address);
+  const { resolved, zipcode, translation } = resolveAddress(address);
+  // What was typed is still sitting in the input box, so the result does not
+  // repeat it; it shows the resolved form instead.
   syncQueryParam(address);
   result.hidden = false;
   result.replaceChildren();
@@ -141,7 +154,7 @@ function showResult(address) {
     const code = document.createElement('strong');
     code.className = 'zipcode';
     code.textContent = zipcode;
-    message.append(code, ` ${address}`);
+    message.append(code, ` ${resolved}`);
   } else {
     message.className = 'not-found';
     message.textContent = '找不到相符的郵遞區號。請確認地址，或嘗試輸入更多資訊。';

@@ -136,6 +136,7 @@ export function getTranslator() {
       // This entry point loads the ZIP index anyway, so the cross-check is
       // free here and on by default; a bare `new Translator` leaves it off.
       verify: (address) => getDirectory().knowsRoad(address),
+      mailbox: getMailbox(),
     });
   }
   return translator;
@@ -153,6 +154,11 @@ export function getTranslator() {
 export function translate(addrStr, options = {}) {
   // A ZIP code already in front of the address would derail both lookups.
   const stripped = stripAddressPrefix(addrStr);
+
+  // A box address carries its own ZIP and English, and canonicalize() would
+  // read 基隆愛三路郵局 as a street; hand it straight to the translator.
+  if (getMailbox().parse(stripped)) return getTranslator().translate(stripped, options);
+
   const directory = getDirectory();
   // canonicalAndFind() canonicalizes once for both the restored address text
   // and the ZIP lookup; skipped when the caller already supplies a ZIP code,

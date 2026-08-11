@@ -148,6 +148,16 @@ translator.translate('臺北市信義區市府路1號', { zipcode: '110204' }).e
 
 瀏覽器版不會自動補上省略的縣市或行政區，也不會自動查郵遞區號；若需要這兩項，請先用 `Directory` 的 `canonical()` 與 `find()` 處理過再傳入。
 
+郵政信箱的英譯也是選用的，跟 `verify` 一樣要自己接上——沒接的話信箱地址會掉進路名比對，把「基隆愛三路郵局」讀成一條叫愛三路的街：
+
+```js
+const translator = await loadTranslator({
+  roadUrl: '/data/road_en.tsv',
+  districtUrl: '/data/district_en.tsv',
+  mailbox: await loadMailbox({ mailboxUrl: '/data/mailbox.tsv' }),
+})
+```
+
 ### 郵政信箱
 
 郵局專用信箱地址（例如「OO郵局第N號信箱」）不是門牌，走的是完全不同的資料與規則：郵遞區號由郵局名稱直接對照得出，不經過門牌規則比對。`find()` 與 `lookup()` 已經涵蓋這類地址，`lookup()` 會以 `source: 'mailbox'` 標示：
@@ -161,9 +171,20 @@ lookup('基隆愛三路郵局第5號信箱')
 // { zipcode: '200900', source: 'mailbox', resolution: 'six-digit' }
 ```
 
+`translate()` 也一併支援，英文局名同樣來自官方資料，不做拼音推導：
+
+```js
+translate('基隆愛三路郵局第5號信箱').english
+// 'P.O. Box 5, Keelung Ai 3rd Road, Keelung City 200900, Taiwan (R.O.C.)'
+translate('政大郵局第12號信箱').english
+// 'P.O. Box 12, National Chengchi University, Taipei City 116979, Taiwan (R.O.C.)'
+```
+
+此時 `parts` 是 `{ poBox, postOffice, city, zipcode }` 四個欄位，`road`、`district` 等門牌欄位不會出現——「基隆愛三路郵局」的「愛三路」是局名的一部分，不是地址所在的路。官方寫法沒有 `Post Office` 字樣，所以不加；`P.O. Box` 這個前綴在來源資料裡有七種不同寫法，無從照抄，統一成慣用的形式。
+
 信箱編號本身不影響郵遞區號，省略「第」或多餘空白都可以。共涵蓋 899 個實際開辦信箱的郵局：來源資料另有 314 個郵局雖已配賦六碼郵遞區號，但信箱狀態是「尚未開辦信箱」，這些一律回傳空字串——那個號碼看起來可以寄達，實際上寄不到。目前只涵蓋一般民用專用信箱；軍事特種信箱（例如「左營郵政九○○○○附○○號信箱」）尚未支援——這類地址的地名寫法太不規則（有時是「縣市+行政區」，有時是「行政區+地方俗名」，也可能只寫縣市，無法從文字本身可靠反推出正確的行政區），從地名猜測有猜錯的風險，比查不到還糟，因此暫不處理，回傳空字串。
 
-只需要信箱查詢的話，可以單獨載入那份 20KB 的資料，不必連帶載入 4.3MB 的門牌索引：
+只需要信箱查詢的話，可以單獨載入那份 46KB 的資料，不必連帶載入 4.3MB 的門牌索引：
 
 ```js
 import { loadMailbox } from 'tw-fuzzy-zipcode/mailbox'
@@ -192,7 +213,7 @@ mailbox.find('基隆愛三路郵局第5號信箱') // '200900'
 
 | 項目         | 結果                                                                         |
 | ------------ | ---------------------------------------------------------------------------- |
-| 傳輸大小     | Brotli 約 0.79 MB；gzip 約 1.21 MB                                           |
+| 傳輸大小     | Brotli 約 0.80 MB；gzip 約 1.21 MB                                           |
 | 載入資料索引 | 瀏覽器約 34 ms；Node 約 56 ms                                                |
 | 載入後記憶體 | 瀏覽器約 5.3 MB；Node 約 21.5 MB                                             |
 | 單次查詢     | 約 1.7–2.0 µs                                                                |
@@ -221,7 +242,18 @@ mailbox.find('基隆愛三路郵局第5號信箱') // '200900'
 
 `npm run build:en` 會把這四個檔案轉成 `data/road_en.tsv` 與 `data/district_en.tsv`。
 
-`data/mailbox.csv`（[郵局專用信箱一覽表](https://data.gov.tw/dataset/27770)）同樣來自中華郵政，在政府資料開放平臺以「政府資料開放授權條款－第 1 版」發布、每日更新，涵蓋全台 1,213 個已開辦的專用信箱。`npm run build:mailbox` 會把它轉成 `data/mailbox.tsv`。
+郵政信箱用到兩個來源，都出自中華郵政：
+
+| 檔案 | 來源 | 內容 |
+| ---- | ---- | ---- |
+| `data/mailbox.csv` | [郵局專用信箱一覽表](https://data.gov.tw/dataset/27770) | 1,278 筆局名、六碼郵遞區號與信箱狀態，每日更新 |
+| `data/mailbox_en.csv` | [同表的線上查詢頁](https://www.post.gov.tw/post/internet/SearchZone/index.jsp?ID=130111) | 899 筆英文局名，由 `npm run fetch:mailbox-en` 逐縣市抓取 |
+
+第一個檔案在政府資料開放平臺以「政府資料開放授權條款－第 1 版」發布。它的 `信箱英文名稱` 欄其實也有英文，但換行被拿掉了，局名會直接黏上縣市（`Taipei HanzhongTaipei City  10899Taiwan ( R.O.C.)`），切回來只能用猜的，而且對局名本身含縣市的兩筆（`Taipei City GovernmentTaipei City`）必定失手；那一欄嵌的還是 5 碼舊郵遞區號。線上查詢頁保留了 `<br>`，切分因此是精確的，號碼也是六碼。
+
+英文縣市名不採用該頁的寫法（它把屏東縣寫成 `Pingtung City`、金門縣寫成 `Jinmen County`），改由 `data/district_en.tsv` 推導，使信箱地址與同縣市的門牌地址輸出一致。
+
+`npm run build:mailbox` 會把這兩個檔案併成 `data/mailbox.tsv`。
 
 ## 開發與驗證
 
@@ -232,6 +264,7 @@ python3 scripts/dbf_to_csv.py rall1.dbf data/2606_01.csv
 pip install zipcodetw
 npm run build
 npm run build:en
+npm run fetch:mailbox-en
 npm run build:mailbox
 npm run build:golden
 npm run typecheck

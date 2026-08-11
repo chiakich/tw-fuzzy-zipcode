@@ -33,7 +33,14 @@ test('every packed key round-trips through the same address form a real box woul
   let total = 0;
   for (const key of mailbox.table.keys()) {
     total += 1;
-    assert.equal(findMailbox(`${key}第7號信箱`), mailbox.table.get(key));
+    const record = mailbox.parse(`${key}第7號信箱`);
+    assert.ok(record, `${key} did not parse back`);
+    assert.equal([record.zipcode, record.postOffice, record.city].join('\x1f'),
+      mailbox.table.get(key), key);
+    assert.match(record.zipcode, /^\d{6}$/, key);
+    // Every field has to be usable on an envelope, not merely present.
+    assert.match(record.postOffice, /^[\x20-\x7e]+$/, `${key} has non-ASCII English`);
+    assert.match(record.city, /^[A-Za-z' ]+ (?:City|County)$/, `${key} city: ${record.city}`);
   }
   assert.ok(total > 800, `expected over 800 post offices, got ${total}`);
 });

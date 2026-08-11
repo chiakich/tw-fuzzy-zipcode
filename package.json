@@ -40,6 +40,7 @@
     "build": "python3 scripts/pack.py data/2606_01.csv data",
     "build:en": "python3 scripts/pack_en.py data",
     "build:mailbox": "python3 scripts/pack_mailbox.py data",
+    "fetch:mailbox-en": "python3 scripts/fetch_mailbox_en.py data",
     "build:golden": "python3 scripts/build_golden_fixture.py data/2606_01.csv test/fixtures/golden_find.tsv"
   },
   "keywords": [

@@ -17,10 +17,23 @@ export interface LoadMailboxOptions {
   fetch?: typeof globalThis.fetch;
 }
 
+/** One packed row, plus the box number read off the address. */
+export interface MailboxRecord {
+  zipcode: string;
+  /** Digits only, leading zeros stripped: 第007號 is box `'7'`. */
+  box: string;
+  /** Official English name, without a 'Post Office' suffix: `'Keelung Ai 3rd Road'`. */
+  postOffice: string;
+  /** English county, from `district_en.tsv` rather than from the box listing. */
+  city: string;
+}
+
 export declare class Mailbox {
   constructor(data: MailboxData);
   /** Returns the 6-digit ZIP code for a P.O. box address, or `''` if unrecognized. */
   find(address: string): string;
+  /** Everything the row holds, or `null` when the address names no known box. */
+  parse(address: string): MailboxRecord | null;
 }
 
 /** Fetches the packaged mailbox table and creates a browser-ready `Mailbox`. */

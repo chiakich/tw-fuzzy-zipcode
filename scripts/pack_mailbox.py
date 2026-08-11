@@ -3,12 +3,17 @@
 
 Source (政府資料開放授權條款-第1版):
 
-    data/mailbox.csv   郵局專用信箱一覽表
-                        https://data.gov.tw/dataset/27770
-                        Updated daily by Chunghwa Post; re-download to refresh.
+    data/mailbox.csv      郵局專用信箱一覽表
+                          https://data.gov.tw/dataset/27770
+                          Updated daily by Chunghwa Post; re-download to refresh.
+
+    data/mailbox_en.csv   English office names, scraped by
+                          scripts/fetch_mailbox_en.py — see there for why the
+                          English in mailbox.csv is not usable as it stands.
 
 Maps each post office's Chinese name (局名) to its box's 6-digit ZIP code
-(六碼郵遞區號). Two kinds of row are dropped:
+(六碼郵遞區號), its English name, and its county's English name, joined by
+U+001F. Two kinds of row are dropped:
 
   * no 6-digit code to key on, and
   * 信箱中文名稱 is '尚未開辦信箱' — the office is listed and has been assigned
@@ -29,6 +34,9 @@ import csv
 import re
 import sys
 from pathlib import Path
+
+# Field separator inside a packed value, matching scripts/pack.py.
+US = '\x1f'
 
 # Ported from src/zipcodetw.mjs; keep the two in lockstep.
 TO_REPLACE_MAP = {
@@ -81,10 +89,43 @@ def read_mailbox_csv(path):
         yield from csv.DictReader(f)
 
 
+def read_front_coded(path):
+    """Undo write_table()'s front coding: {key: value}."""
+    table, prev = {}, ''
+    for line in path.read_text(encoding='utf-8').split('\n'):
+        shared, rest, value = line.split('\t', 2)
+        key = prev[:int(shared, 16)] + rest
+        table[key] = value
+        prev = key
+    return table
+
+
+def read_english(data_dir):
+    """{局名: (English office name, English county)}, from the two sources.
+
+    The page the names come from writes 屏東縣 as 'Pingtung City' and 金門縣 as
+    'Jinmen County', so the county is taken from district_en.tsv instead — the
+    same table the rest of the English output is built from, which keeps a box
+    address and a door-number address in the same city agreeing with each other.
+    """
+    counties = read_front_coded(data_dir / 'district_en.tsv')
+    english = {}
+    for row in read_mailbox_csv(data_dir / 'mailbox_en.csv'):
+        name, county = row['局名'].strip(), row['縣市'].strip()
+        city = counties.get(county)
+        if city is None:
+            print('  ! mailbox_en: no English for %r' % county, file=sys.stderr)
+            continue
+        english[name] = (row['英文局名'].strip(), city)
+    return english
+
+
 def build(data_dir):
     data_dir = Path(data_dir)
 
-    mapping, dropped, unopened, conflicts = {}, 0, 0, 0
+    english = read_english(data_dir)
+
+    mapping, dropped, unopened, conflicts, no_english = {}, 0, 0, 0, 0
     for row in read_mailbox_csv(data_dir / 'mailbox.csv'):
         name = row['局名'].strip()
         zipcode = row['六碼郵遞區號'].strip()
@@ -94,17 +135,27 @@ def build(data_dir):
         if '尚未開辦' in row['信箱中文名稱']:
             unopened += 1
             continue
-        key = normalize(name)
-        if key in mapping and mapping[key] != zipcode:
-            conflicts += 1
-            print('  ! mailbox %s: %r over %r' % (key, zipcode, mapping[key]), file=sys.stderr)
+        if name not in english:
+            # Nothing to write on the envelope in English, and the two sources
+            # agreeing on 899 offices is what says the join is sound; a miss
+            # here means one of them moved.
+            no_english += 1
+            print('  ! mailbox: no English name for %r' % name, file=sys.stderr)
             continue
-        mapping[key] = zipcode
+        value = US.join((zipcode,) + english[name])
+        key = normalize(name)
+        if key in mapping and mapping[key] != value:
+            conflicts += 1
+            print('  ! mailbox %s: %r over %r' % (key, value, mapping[key]), file=sys.stderr)
+            continue
+        mapping[key] = value
 
     if dropped:
         print('  mailbox: skipped %d row(s) without a 6-digit code' % dropped)
     if unopened:
         print('  mailbox: skipped %d office(s) with no box open yet' % unopened)
+    if no_english:
+        print('  mailbox: skipped %d office(s) with no English name' % no_english)
     if conflicts:
         print('  mailbox: %d name collision(s), first value kept' % conflicts)
 

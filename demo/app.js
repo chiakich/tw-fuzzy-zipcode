@@ -1,4 +1,4 @@
-import { loadDirectory } from '../src/zipcodetw.mjs';
+import { Zipcode, loadDirectory, loadMailbox } from '../src/browser.mjs';
 import { loadTranslator, stripAddressPrefix } from '../src/translate.mjs';
 
 const form = document.querySelector('#search-form');
@@ -9,31 +9,46 @@ const suggestions = document.querySelector('#suggestions');
 
 const RECENT_ADDRESSES_KEY = 'tw-fuzzy-zipcode.recent-addresses';
 const QUERY_PARAM = 'q';
-const exampleAddresses = ['臺北市信義區市府路1號', '松山區', '台北市秀山街'];
+const exampleAddresses = [
+  '臺北市信義區市府路1號', '松山區', '台北市秀山街', '基隆愛三路郵局第5號信箱',
+];
 
-let directory;
+let zip;
 let translator;
 let debounceTimer;
 let closeSuggestionsTimer;
 let copyResetTimer;
 
-// Both indexes are fetched in parallel; the ZIP tables dwarf the bilingual
-// ones, so the translation costs little beyond what the lookup already pays.
+// Every index is fetched in parallel; the ZIP tables dwarf the bilingual ones,
+// so the translation costs little beyond what the lookup already pays.
+//
+// Built from the pieces rather than through loadZipcode() only because the
+// translator needs the box table too: at 46KB it lands well before the 4.3MB
+// door-number index, so awaiting it first costs nothing and lets the two big
+// downloads still overlap.
 async function loadDemoDirectory() {
+  const directoryLoad = loadDirectory({
+    gradualUrl: '../data/gradual.tsv',
+    preciseUrl: '../data/precise.tsv',
+  });
+  const mailbox = await loadMailbox({ mailboxUrl: '../data/mailbox.tsv' });
+
+  let directory;
   [directory, translator] = await Promise.all([
-    loadDirectory({
-      gradualUrl: '../data/gradual.tsv',
-      preciseUrl: '../data/precise.tsv',
-    }),
+    directoryLoad,
     loadTranslator({
       roadUrl: '../data/road_en.tsv',
       districtUrl: '../data/district_en.tsv',
       // The bilingual tables carry no location, so 臺北市信義區四維三路 would
       // translate as readily as the 高雄市苓雅區 street it really is. The ZIP
       // index is loaded here anyway, so let it have the last word.
-      verify: (address) => directory.knowsRoad(address),
+      verify: (address) => zip.directory.knowsRoad(address),
+      // Without this a P.O. box falls through to the road tables, which read
+      // 基隆愛三路郵局 as a street called 愛三路.
+      mailbox,
     }),
   ]);
+  zip = new Zipcode({ directory, mailbox });
 }
 
 // Keeps the address in the URL so a lookup can be linked or shared. replaceState,
@@ -48,11 +63,26 @@ function syncQueryParam(address) {
 // The browser translator does neither of the two things the Node entry point
 // does for it: fill in an omitted city/district, and look the ZIP code up.
 // Mirror src/node.mjs so the demo matches the documented behaviour.
-function translateAddress(address) {
+//
+// `resolved` is the address as the library read it, which is what the result
+// shows rather than what was typed — 松江路100號 comes back as
+// 臺北市中山區松江路100號, and 台北市 as 臺北市.
+//
+// A box address is shown as typed instead. There is nothing to restore on one:
+// the office name either matches the table or it does not, and no city or
+// district gets filled in. Normalizing it for display would only mangle it,
+// since the table is keyed on 基隆愛3路郵局 and nobody writes that.
+function resolveAddress(address) {
   const stripped = stripAddressPrefix(address);
-  return translator.translate(directory.canonical(stripped), {
-    zipcode: directory.find(stripped),
-  });
+  const box = zip.mailbox.parse(stripped);
+  const resolved = box ? stripped.trim() : zip.directory.canonical(stripped);
+  return {
+    resolved,
+    zipcode: box ? box.zipcode : zip.findAddress(stripped),
+    translation: box
+      ? translator.translate(stripped)
+      : translator.translate(resolved, { zipcode: zip.findAddress(stripped) }),
+  };
 }
 
 // An empty `english` means the library declined to guess, and the reason is
@@ -95,7 +125,12 @@ function renderEnglish(translation) {
   const note = document.createElement('p');
   note.className = 'english-missing';
   if (untranslated.length > 0) {
-    note.textContent = `無法英譯：「${untranslated.join('」「')}」查無官方譯名，不以拼音推測。`;
+    // The fragments are not quoted back. When the address is a real one with
+    // one unlisted road they read fine, but anything the tokenizer could not
+    // make sense of comes apart into pieces that are not names at all —
+    // 左營華夏路郵局第5號信箱 offers 「左營華夏路郵局第」「信箱」 — and naming
+    // those explains nothing. `untranslated` is still there for callers.
+    note.textContent = '查無官方譯名，不以拼音推測。';
   } else if (!parts.city) {
     note.textContent = '地址不足以定位到縣市，無法產生可寄達的英文地址。';
   } else {
@@ -105,8 +140,9 @@ function renderEnglish(translation) {
 }
 
 function showResult(address) {
-  const zipcode = directory.find(stripAddressPrefix(address));
-  const translation = translateAddress(address);
+  const { resolved, zipcode, translation } = resolveAddress(address);
+  // What was typed is still sitting in the input box, so the result does not
+  // repeat it; it shows the resolved form instead.
   syncQueryParam(address);
   result.hidden = false;
   result.replaceChildren();
@@ -118,7 +154,7 @@ function showResult(address) {
     const code = document.createElement('strong');
     code.className = 'zipcode';
     code.textContent = zipcode;
-    message.append(code, ` ${address}`);
+    message.append(code, ` ${resolved}`);
   } else {
     message.className = 'not-found';
     message.textContent = '找不到相符的郵遞區號。請確認地址，或嘗試輸入更多資訊。';
@@ -234,7 +270,7 @@ function scheduleLookup() {
     return;
   }
   debounceTimer = setTimeout(() => {
-    if (directory) showResult(address);
+    if (zip) showResult(address);
   }, 250);
 }
 
@@ -242,7 +278,7 @@ form.addEventListener('submit', (event) => {
   event.preventDefault();
   clearTimeout(debounceTimer);
   const address = input.value.trim();
-  if (address && directory) showResult(address);
+  if (address && zip) showResult(address);
 });
 
 input.addEventListener('input', () => {

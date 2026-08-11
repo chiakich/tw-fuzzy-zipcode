@@ -41,30 +41,104 @@ find('臺北市松江路100號')
 // '104091'，可省略縣市或行政區
 find('松江路100號')
 // '104091'，若路名唯一兩者都省略也可以
+find('基隆愛三路郵局第5號信箱')
+// '200900'，郵政信箱也一併處理
 
 lookup('臺北市')
 // { zipcode: '1', source: 'gradual', resolution: 'prefix' }
 ```
 
-`find(address)` 接受一個地址字串，只回傳可直接使用的 3 或 6 碼郵遞區號；無法確定有效郵遞區號或找不到時回傳空字串。套件不會回傳無效的 4 或 5 碼中間前綴。
+`find(address)` 接受一個地址字串，只回傳可直接使用的 3 或 6 碼郵遞區號；無法確定有效郵遞區號或找不到時回傳空字串。套件不會回傳無效的 4 或 5 碼中間前綴，並且同時涵蓋門牌地址與郵政信箱。
 
-若介面需要顯示比對層級，請使用 `lookup(address)`。它回傳 `null` 或 `{ zipcode, source, resolution }`：`source` 是 `precise` 或 `gradual`，`resolution` 是 `six-digit`、`three-digit` 或 `prefix`。`prefix` 代表只辨識到縣市等不足以構成郵遞區號的資訊。
+若介面需要顯示比對層級，請使用 `lookup(address)`。它回傳 `null` 或 `{ zipcode, source, resolution }`：
+
+| 欄位         | 字串值        | 說明                                       |
+| ------------ | ------------- | ------------------------------------------ |
+| `source`     | `precise`     | 依門牌規則比對得出                         |
+|              | `gradual`     | 依漸進式地址索引得出                       |
+|              | `mailbox`     | 依郵政信箱對照表得出                       |
+| `resolution` | `six-digit`   | 精確至 6 碼                                |
+|              | `three-digit` | 精確至 3 碼                                |
+|              | `prefix`      | 僅辨識到縣市等前綴，不足以構成有效郵遞區號 |
 
 ### 瀏覽器使用
 
-瀏覽器環境沒有 `fs`，請自行載入套件附帶的兩個資料檔。`loadDirectory()` 會處理載入失敗並建立 `Directory`：
+瀏覽器環境沒有 `fs`，需要使用函數 `loadZipcode()` 載入對照表資料檔。函數會建立 `Zipcode`，它的方法與上一節的函式同名：
 
 ```js
-import { loadDirectory } from 'tw-fuzzy-zipcode/browser'
+import { loadZipcode } from 'tw-fuzzy-zipcode/browser'
 
-const directory = await loadDirectory({
+const zip = await loadZipcode({
   gradualUrl: '/data/gradual.tsv',
   preciseUrl: '/data/precise.tsv',
+  mailboxUrl: '/data/mailbox.tsv',
 })
-directory.find('臺北市信義區市府路1號') // '110204'
+zip.find('臺北市信義區市府路1號') // '110204'
+zip.find('基隆愛三路郵局第5號信箱') // '200900'
 ```
 
 資料檔會隨 npm 套件發布；請在建置流程中將它們複製到網站可存取的位置。
+
+#### 三份字典
+
+套件的資料不是一份大字典，而是三份彼此獨立的，載你需要的那幾份就好：
+
+| 字典     | 檔案                              | 大小   | 內容                          |
+| -------- | --------------------------------- | ------ | ----------------------------- |
+| 門牌索引 | `gradual.tsv` + `precise.tsv`     | 4.3 MB | 地址片段與門牌規則 → 郵遞區號 |
+| 信箱表   | `mailbox.tsv`                     | 46 KB  | 郵局名稱 → 郵遞區號＋英文局名 |
+| 中英對照 | `road_en.tsv` + `district_en.tsv` | 846 KB | 路街與行政區名稱 → 英文       |
+
+分成三份是因為它們互不相依，只想查郵遞區號的人也不必載中英對照。三份的來源與更新頻率也各自不同（見[資料來源](#資料來源與授權)）。
+
+沒有哪一份是「預設載入」的——瀏覽器端你載什麼就有什麼功能：
+
+| 你要做的                       | 門牌索引 | 信箱表 | 中英對照 |
+| ------------------------------ | :------: | :----: | :------: |
+| `findAddress()` 查門牌郵遞區號 |   必要   |   –    |    –     |
+| `findMailbox()` 查信箱郵遞區號 |    –     |  必要  |    –     |
+| `find()` 兩種都查              |   必要   |  必要  |    –     |
+| `translate()` 英譯門牌地址     |  選用 ¹  |   –    |   必要   |
+| `translate()` 英譯信箱地址     |    –     |  必要  |  必要 ²  |
+
+¹ 沒有它，`translate()` 仍可運作，但不會補齊省略的縣市／行政區、不會自動查郵遞區號，也不會交叉驗證路名（見[路名與地點的交叉驗證](#路名與地點的交叉驗證)）。Node 端因為本來就載了門牌索引，這三項預設全開。
+
+² 嚴格來說信箱英文局名整筆存在信箱表裡，但分開有點麻煩。
+
+全部載齊長這樣：
+
+```js
+import { loadZipcode } from 'tw-fuzzy-zipcode/browser'
+import { loadTranslator } from 'tw-fuzzy-zipcode/translate'
+
+const zip = await loadZipcode({
+  gradualUrl: '/data/gradual.tsv',
+  preciseUrl: '/data/precise.tsv',
+  mailboxUrl: '/data/mailbox.tsv',
+})
+const translator = await loadTranslator({
+  roadUrl: '/data/road_en.tsv',
+  districtUrl: '/data/district_en.tsv',
+  // 這兩個是選用的接線，對應上表的 ¹ 與 ²。
+  verify: (address) => zip.directory.knowsRoad(address),
+  mailbox: zip.mailbox,
+})
+```
+
+只要其中一份的話，三個入口分別是 `tw-fuzzy-zipcode/browser`（門牌＋信箱）、`tw-fuzzy-zipcode/mailbox`（只有信箱）、`tw-fuzzy-zipcode/translate`（只有中英對照）。
+
+```js
+import { loadMailbox } from 'tw-fuzzy-zipcode/mailbox'
+
+const mailbox = await loadMailbox({ mailboxUrl: '/data/mailbox.tsv' })
+mailbox.find('基隆愛三路郵局第5號信箱') // '200900'
+```
+
+### 只查地址或者只查郵政信箱
+
+如果你的資料來源保證只有其中一種形式（純地址或者純郵政信箱），可以選用子函數：`findAddress()` / `lookupAddress()` 只查門牌，`findMailbox()` / `lookupMailbox()` 只查郵政信箱。Node 端是同名函式，瀏覽器端是 `Zipcode` 上的同名方法。
+
+不確定的話，因為我們有做字尾檢查的最佳化，用 `find()` 實際上額外的效能成本並不大（見 [`docs/benchmark.md`](docs/benchmark.md)）。
 
 ### 英文地址翻譯
 
@@ -116,51 +190,41 @@ translate('中正路100號')
 ```js
 new Translator({ roadTsv, districtTsv, verify: (address) => directory.knowsRoad(address) })
 
-translate('臺北市信義區四維三路2號').english   // '' — 信義區沒有四維三路
-translate('高雄市苓雅區四維三路2號').english   // 'No. 2, Siwei 3rd Rd., Lingya Dist., ...'
+translate('臺北市信義區四維三路2號').english // '' — 信義區沒有四維三路
+translate('高雄市苓雅區四維三路2號').english // 'No. 2, Siwei 3rd Rd., Lingya Dist., ...'
 ```
 
 Node 入口本來就會載入郵遞區號目錄，所以 `translate()` 預設開啟這項檢查；而 `new Translator({ roadTsv, districtTsv })` 則預設關閉，讓不想載入郵遞區號資料的瀏覽器端仍可單獨使用翻譯功能。
 
 `knowsRoad()` 只在目錄確定時才會否定該地址。地址若沒有指名路段、或屬於村里制的鄉村地址（郵政目錄按村里而非街道編制，`南投縣中寮鄉永和村中正路` 兩個索引都查不到卻是真實地址），一律視為通過。以內含目錄的 44,635 筆地址、四種書寫變形共 178,540 筆實測，誤殺 3 筆，全部落在釣魚臺列嶼的異常列上。
 
-瀏覽器同樣需要自行載入兩個資料檔：
-
-```js
-import { loadTranslator } from 'tw-fuzzy-zipcode/translate'
-
-const translator = await loadTranslator({
-  roadUrl: '/data/road_en.tsv',
-  districtUrl: '/data/district_en.tsv',
-})
-translator.translate('臺北市信義區市府路1號', { zipcode: '110204' }).english
-```
-
-瀏覽器版不會自動補上省略的縣市或行政區，也不會自動查郵遞區號；若需要這兩項，請先用 `Directory` 的 `canonical()` 與 `find()` 處理過再傳入。
+瀏覽器端 `verify` 要自己接上，`mailbox` 也是——沒接 `mailbox` 的話，信箱地址會掉進路名比對，把「基隆愛三路郵局」讀成一條叫愛三路的街。兩者的接法見[三份字典](#三份字典)。
 
 ### 郵政信箱
 
-`findMailbox(address)` 查詢郵局專用信箱地址（例如「OO郵局第N號信箱」）的郵遞區號。這類地址不是門牌，跟 `find()` 走的是完全不同的資料與規則，所以是獨立的函式：
+郵局專用信箱地址（例如「OO郵局第N號信箱」）不是門牌，走的是完全不同的資料與規則：郵遞區號由郵局名稱直接對照得出，不經過門牌規則比對。`find()` 與 `lookup()` 已經涵蓋這類地址，`lookup()` 會以 `source: 'mailbox'` 標示：
 
 ```js
-import { findMailbox } from 'tw-fuzzy-zipcode'
+import { find, lookup } from 'tw-fuzzy-zipcode'
 
-findMailbox('基隆愛三路郵局第5號信箱')
+find('基隆愛三路郵局第5號信箱')
 // '200900'
-findMailbox('臺北市信義區市府路1號')
-// '' — 不是信箱地址
+lookup('基隆愛三路郵局第5號信箱')
+// { zipcode: '200900', source: 'mailbox', resolution: 'six-digit' }
 ```
 
-信箱編號本身不影響郵遞區號，省略「第」或多餘空白都可以。目前只涵蓋一般民用專用信箱；軍事特種信箱（例如「左營郵政九○○○○附○○號信箱」）尚未支援——這類地址的地名寫法太不規則（有時是「縣市+行政區」，有時是「行政區+地方俗名」，也可能只寫縣市，無法從文字本身可靠反推出正確的行政區），從地名猜測有猜錯的風險，比查不到還糟，因此暫不處理，回傳空字串。
-
-瀏覽器版一樣要自行載入資料檔：
+`translate()` 也一併支援，英文局名同樣來自官方資料，不做拼音推導：
 
 ```js
-import { loadMailbox } from 'tw-fuzzy-zipcode/mailbox'
-
-const mailbox = await loadMailbox({ mailboxUrl: '/data/mailbox.tsv' })
-mailbox.find('基隆愛三路郵局第5號信箱') // '200900'
+translate('基隆愛三路郵局第5號信箱').english
+// 'P.O. Box 5, Keelung Ai 3rd Road, Keelung City 200900, Taiwan (R.O.C.)'
+translate('政大郵局第12號信箱').english
+// 'P.O. Box 12, National Chengchi University, Taipei City 116979, Taiwan (R.O.C.)'
 ```
+
+此時 `parts` 是 `{ poBox, postOffice, city, zipcode }` 四個欄位，`road`、`district` 等門牌欄位不會出現——「基隆愛三路郵局」的「愛三路」是局名的一部分，不是地址所在的路。官方寫法沒有 `Post Office` 字樣，所以不加；`P.O. Box` 這個前綴在來源資料裡有七種不同寫法，無從照抄，統一成慣用的形式。
+
+信箱編號本身不影響郵遞區號，省略「第」或多餘空白都可以。共涵蓋 899 個實際開辦信箱的郵局：來源資料另有 314 個郵局雖已配賦六碼郵遞區號，但信箱狀態是「尚未開辦信箱」，這些一律回傳空字串——那個號碼看起來可以寄達，實際上寄不到。目前只涵蓋一般民用專用信箱；軍事特種信箱（例如「左營郵政九○○○○附○○號信箱」）尚未支援——這類地址的地名寫法太不規則（有時是「縣市+行政區」，有時是「行政區+地方俗名」，也可能只寫縣市，無法從文字本身可靠反推出正確的行政區），從地名猜測有猜錯的風險，比查不到還糟，因此暫不處理，回傳空字串。
 
 ## 比對方式
 
@@ -182,10 +246,10 @@ mailbox.find('基隆愛三路郵局第5號信箱') // '200900'
 
 | 項目         | 結果                                                                         |
 | ------------ | ---------------------------------------------------------------------------- |
-| 傳輸大小     | Brotli 約 0.79 MB；gzip 約 1.20 MB                                           |
-| 載入資料索引 | 瀏覽器約 36 ms；Node 約 66 ms                                                |
+| 傳輸大小     | Brotli 約 0.80 MB；gzip 約 1.21 MB                                           |
+| 載入資料索引 | 瀏覽器約 34 ms；Node 約 56 ms                                                |
 | 載入後記憶體 | 瀏覽器約 5.3 MB；Node 約 21.5 MB                                             |
-| 單次查詢     | 約 1.9–2.2 µs                                                                |
+| 單次查詢     | 約 1.7–2.0 µs                                                                |
 | 正確性驗證   | 與 Python 參考實作進行 90,950 筆差異測試，4／5 碼中間前綴會正規化為合法 3 碼 |
 
 兩種索引實作的差異、量測方法與限制，詳見[效能量測](docs/benchmark.md)。
@@ -198,12 +262,12 @@ mailbox.find('基隆愛三路郵局第5號信箱') // '200900'
 
 英文翻譯所用的三個對照檔同樣來自中華郵政，依教育部「中文譯音使用原則」以漢語拼音譯寫：
 
-| 檔案 | 來源 | 內容 |
-| ---- | ---- | ---- |
-| `data/road_en.txt` | [中華郵政路街中英對照文字檔](https://data.gov.tw/dataset/152276) | 29,983 筆路街名稱中英對照 |
-| `data/county_en.xml` | [縣市鄉鎮中英對照檔](https://data.gov.tw/dataset/5949) | 371 筆鄉鎮市區、22 筆縣市中英對照 |
-| `data/village_en.csv` | [村里中英對照檔](https://www.post.gov.tw/post/internet/Postal/village.txt) | 8,521 筆村里與具名巷道中英對照 |
-| `data/road_en_extra.tsv` | 本專案手動維護 | 403 筆官方檔案未收錄的名稱 |
+| 檔案                     | 來源                                                                       | 內容                              |
+| ------------------------ | -------------------------------------------------------------------------- | --------------------------------- |
+| `data/road_en.txt`       | [中華郵政路街中英對照文字檔](https://data.gov.tw/dataset/152276)           | 29,983 筆路街名稱中英對照         |
+| `data/county_en.xml`     | [縣市鄉鎮中英對照檔](https://data.gov.tw/dataset/5949)                     | 371 筆鄉鎮市區、22 筆縣市中英對照 |
+| `data/village_en.csv`    | [村里中英對照檔](https://www.post.gov.tw/post/internet/Postal/village.txt) | 8,521 筆村里與具名巷道中英對照    |
+| `data/road_en_extra.tsv` | 本專案手動維護                                                             | 403 筆官方檔案未收錄的名稱        |
 
 前兩個檔案在政府資料開放平臺以「政府資料開放授權條款－第 1 版」發布。村里檔補上了路街檔沒有的 6,977 個名稱；兩檔衝突的 109 筆以較新的路街檔為準，被取代的多是漢語拼音之前的舊拼法。
 
@@ -211,7 +275,16 @@ mailbox.find('基隆愛三路郵局第5號信箱') // '200900'
 
 `npm run build:en` 會把這四個檔案轉成 `data/road_en.tsv` 與 `data/district_en.tsv`。
 
-`data/mailbox.csv`（[郵局專用信箱一覽表](https://data.gov.tw/dataset/27770)）同樣來自中華郵政，在政府資料開放平臺以「政府資料開放授權條款－第 1 版」發布、每日更新，涵蓋全台 1,213 個已開辦的專用信箱。`npm run build:mailbox` 會把它轉成 `data/mailbox.tsv`。
+郵政信箱用到兩個來源，都出自中華郵政：
+
+| 檔案                  | 來源                                                                                     | 內容                                                     |
+| --------------------- | ---------------------------------------------------------------------------------------- | -------------------------------------------------------- |
+| `data/mailbox.csv`    | [郵局專用信箱一覽表](https://data.gov.tw/dataset/27770)                                  | 1,278 筆局名、六碼郵遞區號與信箱狀態，每日更新           |
+| `data/mailbox_en.csv` | [同表的線上查詢頁](https://www.post.gov.tw/post/internet/SearchZone/index.jsp?ID=130111) | 899 筆英文局名，由 `npm run fetch:mailbox-en` 逐縣市抓取 |
+
+該檔案在政府資料開放平臺以「政府資料開放授權條款－第 1 版」發布。
+
+`npm run build:mailbox` 會把這兩個檔案併成 `data/mailbox.tsv`。
 
 ## 開發與驗證
 
@@ -222,6 +295,7 @@ python3 scripts/dbf_to_csv.py rall1.dbf data/2606_01.csv
 pip install zipcodetw
 npm run build
 npm run build:en
+npm run fetch:mailbox-en
 npm run build:mailbox
 npm run build:golden
 npm run typecheck

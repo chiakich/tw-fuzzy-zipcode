@@ -10,6 +10,7 @@ import { PackedTable, normalize, tokenize } from './zipcodetw.mjs';
 
 /**
  * @import { AddressToken } from './zipcodetw.d.ts'
+ * @import { Mailbox, MailboxRecord } from './mailbox.d.ts'
  * @import { TranslationData, TranslationParts, TranslationResult,
  *   TranslateOptions, LoadTranslatorOptions } from './translate.d.ts'
  */
@@ -49,9 +50,11 @@ const CLOSING_FIELDS = /** @type {Record<string, 'section' | 'lane' | 'alley' | 
   段: 'section', 巷: 'lane', 弄: 'alley',
 });
 
-/** Chinese-order fields; the English address is these reversed. */
+// Chinese-order fields; the English address is these reversed. A P.O. box
+// sets only city + the two box fields, and a door-number address never sets
+// those two, so the one order serves both.
 const FIELD_ORDER = /** @type {const} */ ([
-  'city', 'district', 'village', 'neighborhood',
+  'city', 'postOffice', 'poBox', 'district', 'village', 'neighborhood',
   'road', 'section', 'lane', 'alley', 'subAlley', 'number', 'floor', 'room',
 ]);
 
@@ -82,9 +85,15 @@ export function stripAddressPrefix(addrStr) {
 
 export class Translator {
   /** @param {TranslationData} data */
-  constructor({ roadTsv, districtTsv, verify = null }) {
+  constructor({ roadTsv, districtTsv, verify = null, mailbox = null }) {
     this.roads = new PackedTable(roadTsv);
     this.places = new PackedTable(districtTsv);
+
+    // P.O. box addresses carry their own English, so they never reach the
+    // road and district tables. Optional for the same reason `verify` is: the
+    // translator stays usable for anyone who has not loaded the box table.
+    /** @type {Mailbox | null} */
+    this.mailbox = mailbox;
 
     // The bilingual tables are nationwide and carry no location, so 四維三路
     // translates under 臺北市信義區 as readily as under the 高雄市苓雅區 it
@@ -221,6 +230,12 @@ export class Translator {
    * @returns {TranslationResult}
    */
   translate(addrStr, { zipcode = '', country = DEFAULT_COUNTRY } = {}) {
+    // A box address is a different shape of address, not a door-number one
+    // missing its road: nothing below this line would do anything sensible
+    // with '基隆愛三路郵局第5號信箱', whose 愛三路 is part of the office's name.
+    const box = this.mailbox?.parse(addrStr);
+    if (box) return formatMailbox(box, zipcode, country);
+
     /** @type {TranslationParts} */
     const parts = {};
     /** @type {string[]} */
@@ -367,6 +382,36 @@ export class Translator {
   }
 }
 
+// Chunghwa Post writes a box address over three lines — 'P.O.BOX ○○ Keelung Ai
+// 3rd Road' / 'Keelung City 200900' / 'Taiwan ( R.O.C.)' — which is the same
+// field order the door-number output uses, so it goes through formatEnglish()
+// too. The prefix is spelled seven different ways across the source rows, so
+// there is no official form to copy; 'P.O. Box' is the conventional one.
+//
+// Always complete: a row exists only for an office with a box open, and every
+// field on it is already English.
+/**
+ * @param {MailboxRecord} box
+ * @param {string} zipcode overrides the packed one when the caller supplies it
+ * @param {string | null} country
+ * @returns {TranslationResult}
+ */
+function formatMailbox(box, zipcode, country) {
+  /** @type {TranslationParts} */
+  const parts = {
+    poBox: `P.O. Box ${box.box}`,
+    postOffice: box.postOffice,
+    city: box.city,
+    zipcode: zipcode || box.zipcode,
+  };
+  return {
+    english: formatEnglish(parts, country),
+    parts,
+    untranslated: [],
+    complete: true,
+  };
+}
+
 /**
  * Joins resolved parts into one line, Chunghwa Post order.
  *
@@ -397,7 +442,8 @@ export function formatEnglish(parts, country = DEFAULT_COUNTRY) {
  * @returns {Promise<Translator>}
  */
 export async function loadTranslator({
-  roadUrl, districtUrl, verify = null, fetch: fetchImpl = globalThis.fetch,
+  roadUrl, districtUrl, verify = null, mailbox = null,
+  fetch: fetchImpl = globalThis.fetch,
 } = {}) {
   if (typeof fetchImpl !== 'function') {
     throw new TypeError('A fetch implementation is required to load translation data.');
@@ -419,5 +465,5 @@ export async function loadTranslator({
     fetchText(roadUrl),
     fetchText(districtUrl),
   ]);
-  return new Translator({ roadTsv, districtTsv, verify });
+  return new Translator({ roadTsv, districtTsv, verify, mailbox });
 }

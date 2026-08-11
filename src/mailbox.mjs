@@ -5,12 +5,34 @@
 
 import { PackedTable, normalize } from './zipcodetw.mjs';
 
-/** @import { MailboxData, LoadMailboxOptions } from './mailbox.d.ts' */
+/** @import { MailboxData, MailboxRecord, LoadMailboxOptions } from './mailbox.d.ts' */
 
-// The box number itself never affects the ZIP code — it's discarded rather
-// than captured. '第' and the number are sometimes dropped in practice
-// ('OO郵局5號信箱'), so both are optional.
-const MAILBOX_RE = /^(?<poName>.+?郵局)第?\s*[0-9]+\s*號信箱$/u;
+// The box number never affects the ZIP code, but the English address has to
+// carry it, so it is captured rather than skipped. '第' is sometimes dropped
+// in practice ('OO郵局5號信箱'), so it is optional.
+const MAILBOX_RE = /^(?<poName>.+?郵局)第?\s*(?<box>[0-9]+)\s*號信箱$/u;
+
+const US = '\x1f';
+
+// Callers that don't know which form an address is in run every door-number
+// lookup through find() first, so the reject has to be cheaper than the
+// trim/normalize/regex it guards. MAILBOX_RE demands the string end in 號信箱,
+// which settles it by reading the tail — but only after skipping what trim()
+// and normalize() would have removed there, or '第5號信箱，' would slip past.
+const XIN = 0x4fe1, XIANG = 0x7bb1; // 信, 箱
+const TRAILING = ' 　,，\t\n\r';
+
+/**
+ * @param {string} addrStr
+ * @returns {boolean} false only when MAILBOX_RE certainly won't match
+ */
+function couldBeMailbox(addrStr) {
+  let end = addrStr.length;
+  while (end > 0 && TRAILING.includes(addrStr[end - 1])) end -= 1;
+  return end >= 2
+    && addrStr.charCodeAt(end - 1) === XIANG
+    && addrStr.charCodeAt(end - 2) === XIN;
+}
 
 export class Mailbox {
   /** @param {MailboxData} data */
@@ -19,13 +41,30 @@ export class Mailbox {
   }
 
   /**
+   * Everything the packed row holds about this address, or `null` when it
+   * isn't a P.O. box address or names an office with no box.
+   *
+   * @param {string} addrStr
+   * @returns {MailboxRecord | null}
+   */
+  parse(addrStr) {
+    if (!couldBeMailbox(addrStr)) return null;
+    const match = normalize(addrStr.trim()).match(MAILBOX_RE);
+    if (!match || !match.groups) return null;
+    const entry = this.table.get(match.groups.poName);
+    if (entry === undefined) return null;
+    const [zipcode, postOffice, city] = entry.split(US);
+    // The box number is passed through as written, leading zeros and all:
+    // 第007號 is how the box is labelled, and the envelope should say the same.
+    return { zipcode, box: match.groups.box, postOffice, city };
+  }
+
+  /**
    * @param {string} addrStr
    * @returns {string} 6-digit ZIP code, or '' if this isn't a recognized P.O. box address
    */
   find(addrStr) {
-    const match = normalize(addrStr.trim()).match(MAILBOX_RE);
-    if (!match || !match.groups) return '';
-    return this.table.get(match.groups.poName) ?? '';
+    return this.parse(addrStr)?.zipcode ?? '';
   }
 }
 

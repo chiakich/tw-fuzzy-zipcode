@@ -243,3 +243,67 @@ test('browser loader builds a translator and reports failed data requests', asyn
   );
   await assert.rejects(loadTranslator({ fetch: async () => ({ ok: true }) }), TypeError);
 });
+
+test('translates a P.O. box from the box table, not the road tables', () => {
+  const { english, parts, untranslated, complete } = translate('基隆愛三路郵局第5號信箱');
+  assert.equal(english, 'P.O. Box 5, Keelung Ai 3rd Road, Keelung City 200900, Taiwan (R.O.C.)');
+  assert.deepEqual(parts, {
+    poBox: 'P.O. Box 5',
+    postOffice: 'Keelung Ai 3rd Road',
+    city: 'Keelung City',
+    zipcode: '200900',
+  });
+  assert.deepEqual(untranslated, []);
+  assert.equal(complete, true);
+});
+
+test('a box address never reaches the road tables', () => {
+  // 愛三路 is part of the office's name, not a street the address sits on.
+  // Without the box branch this came back as a Keelung road plus a stray 郵局.
+  const { parts } = translate('基隆愛三路郵局第5號信箱');
+  assert.equal(parts.road, undefined);
+  assert.equal(parts.district, undefined);
+  // Same for an office named after a university rather than a road.
+  assert.equal(
+    translate('政大郵局第12號信箱').english,
+    'P.O. Box 12, National Chengchi University, Taipei City 116979, Taiwan (R.O.C.)',
+  );
+});
+
+test('box addresses honour the same options door-number addresses do', () => {
+  assert.equal(
+    translate('基隆愛三路郵局第5號信箱', { country: null }).english,
+    'P.O. Box 5, Keelung Ai 3rd Road, Keelung City 200900',
+  );
+  // A caller-supplied ZIP wins over the packed one, as it does elsewhere.
+  assert.equal(
+    translate('基隆愛三路郵局第5號信箱', { zipcode: '200' }).parts.zipcode, '200',
+  );
+  // A ZIP already in front of the address is the answer, not the question.
+  assert.equal(
+    translate('200900 基隆愛三路郵局第5號信箱').english,
+    translate('基隆愛三路郵局第5號信箱').english,
+  );
+});
+
+test('the box number is read off the address, not the table', () => {
+  const box = (n) => translate(`基隆愛三路郵局第${n}號信箱`).parts.poBox;
+  assert.equal(box(5), 'P.O. Box 5');
+  assert.equal(box(4321), 'P.O. Box 4321');
+  assert.equal(box('007'), 'P.O. Box 007');
+});
+
+test('an office with no box open stays untranslated rather than inventing one', () => {
+  // 左營華夏路郵局 is listed with a 6-digit code but 尚未開辦信箱.
+  const { english, complete } = translate('左營華夏路郵局第5號信箱');
+  assert.equal(english, '');
+  assert.equal(complete, false);
+});
+
+test('a translator without the box table leaves box addresses alone', () => {
+  const bare = new Translator({
+    roadTsv: readFileSync(dataPath('road_en.tsv'), 'utf8'),
+    districtTsv: readFileSync(dataPath('district_en.tsv'), 'utf8'),
+  });
+  assert.equal(bare.translate('基隆愛三路郵局第5號信箱').parts.poBox, undefined);
+});

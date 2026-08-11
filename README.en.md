@@ -41,30 +41,95 @@ find('臺北市松江路100號')
 // '104091' — the city or the district may be omitted
 find('松江路100號')
 // '104091' — or both, if the road name is unique
+find('基隆愛三路郵局第5號信箱')
+// '200900' — P.O. boxes are covered too
 
 lookup('臺北市')
 // { zipcode: '1', source: 'gradual', resolution: 'prefix' }
 ```
 
-`find(address)` accepts an address string and returns only a usable 3- or 6-digit ZIP code. It returns an empty string when no usable ZIP code can be determined or no match is found. The package never returns an invalid 4- or 5-digit intermediate prefix.
+`find(address)` accepts an address string and returns only a usable 3- or 6-digit ZIP code. It returns an empty string when no usable ZIP code can be determined or no match is found. The package never returns an invalid 4- or 5-digit intermediate prefix. It covers both door-number addresses and P.O. boxes, because real user-supplied addresses arrive as a mix of the two and the caller shouldn't have to sort them out first.
 
-Use `lookup(address)` when the UI needs the matching detail. It returns `null` or `{ zipcode, source, resolution }`: `source` is `precise` or `gradual`, and `resolution` is `six-digit`, `three-digit`, or `prefix`. `prefix` means the match only identifies broad information, such as a city, and does not form a usable ZIP code.
+Use `lookup(address)` when the UI needs the matching detail. It returns `null` or `{ zipcode, source, resolution }`: `source` is `precise`, `gradual`, or `mailbox`, and `resolution` is `six-digit`, `three-digit`, or `prefix`. `prefix` means the match only identifies broad information, such as a city, and does not form a usable ZIP code.
 
 ### Browser usage
 
-Browsers do not have `fs`, so load the two packaged data files yourself. `loadDirectory()` handles loading failures and creates a `Directory`:
+Browsers do not have `fs`, so load the packaged data files yourself. `loadZipcode()` handles loading failures and creates a `Zipcode`, whose methods carry the same names as the functions above:
 
 ```js
-import { loadDirectory } from 'tw-fuzzy-zipcode/browser'
+import { loadZipcode } from 'tw-fuzzy-zipcode/browser'
 
-const directory = await loadDirectory({
+const zip = await loadZipcode({
   gradualUrl: '/data/gradual.tsv',
   preciseUrl: '/data/precise.tsv',
+  mailboxUrl: '/data/mailbox.tsv',
 })
-directory.find('臺北市信義區市府路1號') // '110204'
+zip.find('臺北市信義區市府路1號')    // '110204'
+zip.find('基隆愛三路郵局第5號信箱')  // '200900'
 ```
 
 The data files are included in the npm package; copy them to a location your site can serve during its build process.
+
+#### Three dictionaries
+
+The package's data is not one big dictionary but three independent ones, and you load only the ones you need:
+
+| Dictionary | Files | Size | Contents |
+| ---------- | ----- | ---- | -------- |
+| Door-number index | `gradual.tsv` + `precise.tsv` | 4.3 MB | address fragments and house-number rules → ZIP code |
+| Box table | `mailbox.tsv` | 46 KB | post office name → ZIP code + English name |
+| Bilingual tables | `road_en.tsv` + `district_en.tsv` | 846 KB | road and district names → English |
+
+They are split because they are independent of one another and **most callers do not need all three**. The door-number index alone is 4.3 MB, nearly five times the other two combined, and someone who only wants translation or only wants box lookups should not pay for it; equally, someone who only wants ZIP codes should not download the bilingual tables. The three also come from different sources on different update cadences (see [Data sources](#data-source-and-license)).
+
+None of them is loaded by default — in the browser you get the features you load the data for:
+
+| What you want | Door-number index | Box table | Bilingual tables |
+| ------------- | :---------------: | :-------: | :--------------: |
+| `findAddress()`, door-number ZIP codes | required | – | – |
+| `findMailbox()`, P.O. box ZIP codes | – | required | – |
+| `find()`, both forms | required | required | – |
+| `translate()` on a door-number address | optional ¹ | – | required |
+| `translate()` on a P.O. box | – | required | required ² |
+
+¹ `translate()` works without it, but will not restore an omitted city or district, will not look the ZIP code up, and will not cross-check the road against its location (see [Cross-checking](#cross-checking-the-road-against-the-location)). The Node entry point loads the index anyway, so all three are on there by default.
+
+² Strictly, translating a box never consults the bilingual tables — the English office name is stored whole in the box table — but `Translator`'s constructor requires them regardless, so they still have to be loaded.
+
+All three together:
+
+```js
+import { loadZipcode } from 'tw-fuzzy-zipcode/browser'
+import { loadTranslator } from 'tw-fuzzy-zipcode/translate'
+
+const zip = await loadZipcode({
+  gradualUrl: '/data/gradual.tsv',
+  preciseUrl: '/data/precise.tsv',
+  mailboxUrl: '/data/mailbox.tsv',
+})
+const translator = await loadTranslator({
+  roadUrl: '/data/road_en.tsv',
+  districtUrl: '/data/district_en.tsv',
+  // The two optional hook-ups, matching ¹ and ² above.
+  verify: (address) => zip.directory.knowsRoad(address),
+  mailbox: zip.mailbox,
+})
+```
+
+For one dictionary on its own, the three entry points are `tw-fuzzy-zipcode/browser` (door-number + box), `tw-fuzzy-zipcode/mailbox` (box only), and `tw-fuzzy-zipcode/translate` (bilingual only). What is separated is the **data**: you download only the TSVs you load. The modules do share a little code — `mailbox` and `translate` both use `PackedTable` and `normalize` from `zipcodetw.mjs` — but that is a few KB of decoding and normalization, not data.
+
+```js
+import { loadMailbox } from 'tw-fuzzy-zipcode/mailbox'
+
+const mailbox = await loadMailbox({ mailboxUrl: '/data/mailbox.tsv' })
+mailbox.find('基隆愛三路郵局第5號信箱') // '200900'
+```
+
+### When you already know the address form
+
+If your input is guaranteed to be one form, you can skip the check for the other: `findAddress()` / `lookupAddress()` handle door-number addresses only, and `findMailbox()` / `lookupMailbox()` handle P.O. boxes only. They are plain functions on Node and identically named methods on `Zipcode` in the browser.
+
+When in doubt, use `find()`. Its extra cost on door-number addresses sits inside the measurement noise (see [`docs/benchmark.md`](docs/benchmark.md)) because the P.O. box match rejects them by their tail, before any normalization.
 
 ### English address translation
 
@@ -122,43 +187,33 @@ The Node entry point loads the ZIP directory anyway, so its `translate()` turns 
 
 `knowsRoad()` only rejects an address when the directory has something to say about it. An address that names no road, or a rural 村/里 one — which the directory files by village rather than by street, so a real address like 南投縣中寮鄉永和村中正路 appears in neither index — always passes. Measured over the bundled directory's 44,635 addresses in four written shapes (178,540 in all), it wrongly rejects 3, every one of them the malformed 釣魚臺列嶼 row described above.
 
-Browsers load the two data files themselves, as with the ZIP code directory:
-
-```js
-import { loadTranslator } from 'tw-fuzzy-zipcode/translate'
-
-const translator = await loadTranslator({
-  roadUrl: '/data/road_en.tsv',
-  districtUrl: '/data/district_en.tsv',
-})
-translator.translate('臺北市信義區市府路1號', { zipcode: '110204' }).english
-```
-
-The browser translator neither restores an omitted city or district nor looks up ZIP codes; run the address through `Directory`'s `canonical()` and `find()` first if you need either.
+In the browser you wire `verify` up yourself, and `mailbox` with it — without `mailbox`, a box address falls through to the road tables, which read 基隆愛三路郵局 as a street called 愛三路. Both hook-ups are shown under [Three dictionaries](#three-dictionaries).
 
 ### P.O. box addresses
 
-`findMailbox(address)` looks up the ZIP code for a Chunghwa Post P.O. box address ('OO郵局第N號信箱'). These aren't door-number addresses, so they run on entirely different data and rules than `find()` — hence the separate function:
+Chunghwa Post P.O. box addresses ('OO郵局第N號信箱') aren't door-number addresses, so they run on entirely different data and rules: the ZIP code comes straight from the post office's name and never touches the door-number rules. `find()` and `lookup()` already cover them, and `lookup()` labels them with `source: 'mailbox'`:
 
 ```js
-import { findMailbox } from 'tw-fuzzy-zipcode'
+import { find, lookup } from 'tw-fuzzy-zipcode'
 
-findMailbox('基隆愛三路郵局第5號信箱')
+find('基隆愛三路郵局第5號信箱')
 // '200900'
-findMailbox('臺北市信義區市府路1號')
-// '' — not a P.O. box address
+lookup('基隆愛三路郵局第5號信箱')
+// { zipcode: '200900', source: 'mailbox', resolution: 'six-digit' }
 ```
 
-The box number itself doesn't affect the ZIP code; omitting 第 or extra whitespace is fine. Only ordinary civilian P.O. boxes are covered so far. Military special mailboxes (e.g. '左營郵政九○○○○附○○號信箱') aren't supported yet — their place names are too irregular to parse reliably (sometimes "county+district", sometimes "district+informal local name", sometimes just a bare county name with nothing to pin down the district), so guessing from the text risks a wrong answer, which is worse than no answer. Those addresses return an empty string for now.
-
-The browser build loads its own data file the same way:
+`translate()` covers them too, from the same official data — nothing is romanized on the fly here either:
 
 ```js
-import { loadMailbox } from 'tw-fuzzy-zipcode/mailbox'
-
-const mailbox = await loadMailbox({ mailboxUrl: '/data/mailbox.tsv' })
-mailbox.find('基隆愛三路郵局第5號信箱') // '200900'
+translate('基隆愛三路郵局第5號信箱').english
+// 'P.O. Box 5, Keelung Ai 3rd Road, Keelung City 200900, Taiwan (R.O.C.)'
+translate('政大郵局第12號信箱').english
+// 'P.O. Box 12, National Chengchi University, Taipei City 116979, Taiwan (R.O.C.)'
 ```
+
+`parts` then holds `{ poBox, postOffice, city, zipcode }` and none of the door-number fields: the 愛三路 in 基隆愛三路郵局 is part of the office's name, not a street the address sits on. The official form carries no 'Post Office' suffix, so neither does this; the `P.O. Box` prefix is spelled seven different ways across the source rows, so there is nothing to copy and this picks the conventional one.
+
+The box number itself doesn't affect the ZIP code; omitting 第 or extra whitespace is fine. 899 post offices with a box actually open are covered. The source data lists another 314 that have been assigned a 6-digit code but whose box status is 「尚未開辦信箱」 — no box open yet; those return an empty string, because that code looks deliverable and isn't. Only ordinary civilian P.O. boxes are covered so far. Military special mailboxes (e.g. '左營郵政九○○○○附○○號信箱') aren't supported yet — their place names are too irregular to parse reliably (sometimes "county+district", sometimes "district+informal local name", sometimes just a bare county name with nothing to pin down the district), so guessing from the text risks a wrong answer, which is worse than no answer. Those addresses return an empty string for now.
 
 ## How matching works
 
@@ -180,10 +235,10 @@ The matcher compares address fragments and house-number rules in order, includin
 
 | Metric            | Result                                                                                                                                   |
 | ----------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
-| Transfer size     | About 0.79 MB Brotli; 1.20 MB gzip                                                                                                       |
-| Index build       | About 36 ms in the browser; 66 ms on Node                                                                                                |
+| Transfer size     | About 0.80 MB Brotli; 1.21 MB gzip                                                                                                       |
+| Index build       | About 34 ms in the browser; 56 ms on Node                                                                                                |
 | Memory after load | About 5.3 MB in the browser; 21.5 MB on Node                                                                                             |
-| Lookup            | About 1.9–2.2 µs per lookup                                                                                                              |
+| Lookup            | About 1.7–2.0 µs per lookup                                                                                                              |
 | Verification      | 90,950 differential queries against the Python reference; invalid 4-/5-digit intermediate prefixes are normalized to valid 3-digit codes |
 
 For the two index implementations, the measurement method, and its caveats, see the [benchmark](docs/benchmark.md) (written in Chinese).
@@ -209,7 +264,18 @@ The published files lag the post office's own online lookup — 東彰南路 is 
 
 `npm run build:en` converts all four into `data/road_en.tsv` and `data/district_en.tsv`.
 
-`data/mailbox.csv` ([郵局專用信箱一覽表](https://data.gov.tw/dataset/27770)) also comes from Chunghwa Post, published on Taiwan's open data platform under the Open Government Data License, version 1.0, and updated daily. It covers 1,213 P.O. boxes currently open nationwide. `npm run build:mailbox` converts it to `data/mailbox.tsv`.
+P.O. boxes draw on two sources, both from Chunghwa Post:
+
+| File | Source | Contents |
+| ---- | ------ | -------- |
+| `data/mailbox.csv` | [郵局專用信箱一覽表](https://data.gov.tw/dataset/27770) | 1,278 office names, 6-digit ZIP codes, and box status; updated daily |
+| `data/mailbox_en.csv` | [the same table's lookup page](https://www.post.gov.tw/post/internet/SearchZone/index.jsp?ID=130111) | 899 English office names, scraped county by county by `npm run fetch:mailbox-en` |
+
+The first is published on Taiwan's open data platform under the Open Government Data License, version 1.0. Its 信箱英文名稱 column does carry English, but with the line breaks stripped, so the office name runs straight into the city (`Taipei HanzhongTaipei City  10899Taiwan ( R.O.C.)`). Splitting that back apart is guesswork, and it fails outright on the two offices whose own name contains a city (`Taipei City GovernmentTaipei City`); the ZIP codes embedded in that column are also still the legacy 5-digit ones. The lookup page keeps the `<br>`, which makes the split exact, and its codes are 6-digit.
+
+The English county name is not taken from that page — it writes 屏東縣 as `Pingtung City` and 金門縣 as `Jinmen County` — but derived from `data/district_en.tsv`, so a box address and a door-number address in the same city agree.
+
+`npm run build:mailbox` joins the two into `data/mailbox.tsv`.
 
 ## Development and verification
 
@@ -220,6 +286,7 @@ python3 scripts/dbf_to_csv.py rall1.dbf data/2606_01.csv
 pip install zipcodetw
 npm run build
 npm run build:en
+npm run fetch:mailbox-en
 npm run build:mailbox
 npm run build:golden
 npm run typecheck

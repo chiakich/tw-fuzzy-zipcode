@@ -2,9 +2,9 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
-import { getTranslator, translate } from '../src/node.mjs';
+import { getDirectory, getTranslator, translate } from '../src/node.mjs';
 import { normalize } from '../src/zipcodetw.mjs';
-import { formatEnglish, loadTranslator } from '../src/translate.mjs';
+import { formatEnglish, loadTranslator, Translator } from '../src/translate.mjs';
 
 const dataPath = (name) => fileURLToPath(new URL(`../data/${name}`, import.meta.url));
 
@@ -86,17 +86,84 @@ test('fills in the city when only the district is named', () => {
 
 test('leaves an ambiguous district in Chinese rather than guessing', () => {
   // 中正區 exists in four cities, and nothing here says which.
-  const { parts, untranslated, complete } = translate('中正區');
+  const { english, parts, untranslated, complete } = translate('中正區');
   assert.equal(parts.district, '中正區');
   assert.deepEqual(untranslated, ['中正區']);
   assert.equal(complete, false);
+  assert.equal(english, '');
 });
 
-test('passes untranslated names through in Chinese and reports them', () => {
-  const { english, untranslated, complete } = translate('臺北市信義區沒有這條路1號');
-  assert.match(english, /沒有這條路/);
+test('keeps untranslated names in parts but empties english', () => {
+  const { english, parts, untranslated, complete } = translate('臺北市信義區沒有這條路1號');
+  assert.equal(english, '');
+  assert.equal(parts.road, '沒有這條路');
   assert.deepEqual(untranslated, ['沒有這條路']);
   assert.equal(complete, false);
+});
+
+test('rejects a road the named district does not have', () => {
+  // 四維三路 is Kaohsiung's, 市府路 Taipei's, 臺灣大道 Taichung's. Every name
+  // here translates — the bilingual tables are nationwide and say nothing
+  // about location — so only the ZIP index can tell these are not addresses.
+  for (const address of [
+    '臺北市信義區四維三路2號',
+    '宜蘭縣礁溪鄉市府路1號',
+    '基隆市信義區台灣大道三段99號',
+  ]) {
+    const { english, complete, untranslated } = translate(address);
+    assert.equal(english, '', address);
+    assert.equal(complete, false, address);
+    // Nothing failed to translate; the address itself is what is wrong.
+    assert.deepEqual(untranslated, [], address);
+  }
+
+  // The same street names under the districts that do have them.
+  assert.ok(translate('高雄市苓雅區四維三路2號').complete);
+  assert.ok(translate('臺北市信義區市府路1號').complete);
+  assert.ok(translate('臺中市西屯區台灣大道三段99號').complete);
+});
+
+test('verification is off unless a verifier is supplied', () => {
+  // A bare Translator has no ZIP index and must not pretend otherwise.
+  const bare = new Translator({
+    roadTsv: readFileSync(dataPath('road_en.tsv'), 'utf8'),
+    districtTsv: readFileSync(dataPath('district_en.tsv'), 'utf8'),
+  });
+  assert.equal(
+    bare.translate('臺北市信義區四維三路2號').english,
+    'No. 2, Siwei 3rd Rd., Xinyi Dist., Taipei City, Taiwan (R.O.C.)',
+  );
+  assert.equal(bare.translate('臺北市信義區四維三路2號').complete, true);
+});
+
+test('knowsRoad leaves alone what the directory cannot contradict', () => {
+  const directory = getDirectory();
+  // Rural addressing is filed by village, not by street: 南投縣中寮鄉永和村中正路
+  // is in neither index and is a real address regardless.
+  assert.equal(directory.knowsRoad('南投縣中寮鄉永和村中正路5號'), true);
+  assert.equal(directory.knowsRoad('臺東縣太麻里鄉大王村1號'), true);
+  // Nothing past the district is being claimed.
+  assert.equal(directory.knowsRoad('臺北市'), true);
+  assert.equal(directory.knowsRoad('嘉義縣民雄鄉'), true);
+  // A road with no house-number rule of its own lives in the gradual index.
+  assert.equal(directory.knowsRoad('南投縣中寮鄉中集路'), true);
+  // A named lane is part of the road name, with or without a house number.
+  assert.equal(directory.knowsRoad('南投縣國姓鄉東1巷'), true);
+  assert.equal(directory.knowsRoad('南投縣國姓鄉東1巷5號'), true);
+  // And the ones it can contradict.
+  assert.equal(directory.knowsRoad('臺北市信義區四維三路2號'), false);
+  assert.equal(directory.knowsRoad('臺北市信義區沒有這條路1號'), false);
+});
+
+test('an address that never resolves its city empties english too', () => {
+  // 中正路 exists all over Taiwan; without a city nothing anchors it, so the
+  // result is no address at all rather than a line that cannot be delivered.
+  const { english, parts, complete } = translate('中正路100號');
+  assert.equal(english, '');
+  assert.equal(complete, false);
+  // The fields that did translate are still there for callers to build on.
+  assert.equal(parts.road, 'Zhongzheng Rd.');
+  assert.equal(parts.number, 'No. 100');
 });
 
 test('city-only and district-only addresses translate without a ZIP code', () => {
@@ -143,9 +210,11 @@ test('the bundled tables cover the addresses the ZIP directory knows', () => {
     total += 1;
     if (translator.translate(key).complete) complete += 1;
   }
-  // 99.99% at the time of writing: 6 keys short, all of them malformed rows
-  // in the source CSV ('地下層' in the road column, the 釣魚臺列嶼 district).
-  // Whatever is left comes back in Chinese and flagged, never guessed.
+  // 99.99% at the time of writing: 4 keys short, all of them the same kind of
+  // malformed row in the source CSV — an uninhabited island whose county name
+  // was truncated to the column width ('南海諸' for 南海諸島) and whose road
+  // column then repeats the district. Nothing is guessed; those come back
+  // flagged, with an empty `english`.
   assert.ok(complete / total > 0.999, `coverage ${(100 * complete / total).toFixed(2)}%`);
 });
 

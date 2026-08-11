@@ -57,6 +57,9 @@ export function getTranslator() {
     translator = new Translator({
       roadTsv: readFileSync(dataPath('road_en.tsv'), 'utf8'),
       districtTsv: readFileSync(dataPath('district_en.tsv'), 'utf8'),
+      // This entry point loads the ZIP index anyway, so the cross-check is
+      // free here and on by default; a bare `new Translator` leaves it off.
+      verify: (address) => getDirectory().knowsRoad(address),
     });
   }
   return translator;
@@ -74,7 +77,12 @@ export function getTranslator() {
 export function translate(addrStr, options = {}) {
   // A ZIP code already in front of the address would derail both lookups.
   const stripped = stripAddressPrefix(addrStr);
-  const zipcode = options.zipcode ?? find(stripped);
-  const canonical = getDirectory().canonical(stripped);
+  const directory = getDirectory();
+  // canonicalAndFind() canonicalizes once for both the restored address text
+  // and the ZIP lookup; skipped when the caller already supplies a ZIP code,
+  // since canonical() alone is then all that's needed.
+  const { canonical, zipcode } = options.zipcode != null
+    ? { canonical: directory.canonical(stripped), zipcode: options.zipcode }
+    : directory.canonicalAndFind(stripped);
   return getTranslator().translate(canonical, { ...options, zipcode });
 }

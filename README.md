@@ -90,17 +90,39 @@ translate('臺北市中山區松江路100號')
 
 郵遞區號會自動查好一併帶入，也可用 `translate(address, { zipcode })` 自行指定，或用 `{ country: null }` 省略結尾的國名。若想自訂排版，`parts` 內是各欄位已經翻好的字串，可搭配 `formatEnglish(parts, country)` 重新組合。
 
-**這裡不做任何拼音推導。** 所有名稱都來自中華郵政的官方中英對照資料；查不到的名稱會原樣保留中文，並列在 `untranslated` 中，`complete` 則為 `false`：
+目前所有名稱都來自中華郵政的官方中英對照資料，暫時先不做任何拼音推導。
+
+`english` 和 `find()` 相同，有值就一定是完整、可寄達的英文地址。只要有名稱查不到官方翻譯，或地址無法定位到縣市，`english` 會回空字串、`complete` 為 `false`；查不到的名稱列在 `untranslated`，已翻好的欄位仍留在 `parts` 供呼叫端自行利用：
 
 ```js
-const { english, untranslated, complete } = translate('宜蘭縣礁溪鄉北宜路1號')
-// english: 'No. 1, 北宜路, Jiaoxi Township, Yilan County 262, Taiwan (R.O.C.)'
-// untranslated: ['北宜路'], complete: false
+const { english, parts, untranslated, complete } = translate('宜蘭縣礁溪鄉測試路1號')
+// english: '',  untranslated: ['測試路'],  complete: false
+// parts: { number: 'No. 1', road: '測試路',
+//          district: 'Jiaoxi Township', city: 'Yilan County', zipcode: '262' }
+
+translate('中正路100號')
+// 全台到處都有中正路，缺縣市無從定位，english 為 ''，
+// 但 parts 仍有 { road: 'Zhongzheng Rd.', number: 'No. 100' }
 ```
 
-以套件內含的郵遞區號目錄實測，99.99% 的地址可以完全翻譯（44,635 筆中僅 6 筆未完成，且都是原始資料本身的異常列，例如塞在路名欄的「地下層」）。**寧可留中文，也不猜拼音** — 寄件人看不出猜錯的英文路名，但看得出中文。
+以套件內含的郵遞區號目錄實測，99.99% 的地址可以完全翻譯。
 
-行政區同名時（例如四個縣市都有中正區）也一樣不猜：若地址其他部分不足以判斷是哪一個，該欄位就保留中文。
+行政區同名時（例如四個縣市都有中正區）也一樣不猜：若地址其他部分不足以判斷是哪一個，該欄位就保留中文並使 `english` 為空。
+
+### 路名與地點的交叉驗證
+
+中英對照表是全國性的、不帶地點資訊，所以「四維三路」掛在臺北市信義區底下也一樣翻得出來，儘管它其實是高雄市苓雅區的路。只有郵遞區號目錄知道哪條路在哪裡，因此 `Translator` 接受一個選用的 `verify` 參數，`Directory.knowsRoad` 正是為它準備的：
+
+```js
+new Translator({ roadTsv, districtTsv, verify: (address) => directory.knowsRoad(address) })
+
+translate('臺北市信義區四維三路2號').english   // '' — 信義區沒有四維三路
+translate('高雄市苓雅區四維三路2號').english   // 'No. 2, Siwei 3rd Rd., Lingya Dist., ...'
+```
+
+Node 入口本來就會載入郵遞區號目錄，所以 `translate()` 預設開啟這項檢查；而 `new Translator({ roadTsv, districtTsv })` 則預設關閉，讓不想載入郵遞區號資料的瀏覽器端仍可單獨使用翻譯功能。
+
+`knowsRoad()` 只在目錄確定時才會否定該地址。地址若沒有指名路段、或屬於村里制的鄉村地址（郵政目錄按村里而非街道編制，`南投縣中寮鄉永和村中正路` 兩個索引都查不到卻是真實地址），一律視為通過。以內含目錄的 44,635 筆地址、四種書寫變形共 178,540 筆實測，誤殺 3 筆，全部落在釣魚臺列嶼的異常列上。
 
 瀏覽器同樣需要自行載入兩個資料檔：
 

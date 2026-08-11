@@ -2,9 +2,9 @@
 //
 // Nothing here is romanized on the fly: every name comes from one of the two
 // official bilingual tables (see scripts/pack_en.py). A name the tables do not
-// carry is passed through in Chinese and reported in `untranslated` — a wrong
-// English street name is worse than an honest Chinese one, since the sender
-// cannot tell it went wrong.
+// carry stays Chinese in `parts`, is reported in `untranslated`, and empties
+// `english` — a wrong English street name is worse than an honest miss, since
+// the sender cannot tell it went wrong.
 
 import { PackedTable, normalize, tokenize } from './zipcodetw.mjs';
 
@@ -19,7 +19,12 @@ const NO = 0, SUBNO = 1, NAME = 2, UNIT = 3;
 /** The county/city half of a place key, e.g. '臺北市' of '臺北市信義區'. */
 const CITY_RE = /^.+?[縣市]/u;
 
-/** The longest name in the place table is 5 characters ('南海諸南沙'). */
+// Bounds longestPlace() when it matches a city or a district, never both at
+// once: translate() strips the city first and scans the district separately
+// (see the two calls below), so what this needs to cover is the longer of
+// the two components alone. The longest district is 4 ('阿里山鄉'); full
+// place-table keys join city+district and run up to 7 ('嘉義縣阿里山鄉'), but
+// no single scan ever sees that whole string.
 const MAX_PLACE_CHARS = 6;
 
 /** The longest name in the road table is 13 ('延平路2段430巷居易1弄'). */
@@ -77,9 +82,17 @@ export function stripAddressPrefix(addrStr) {
 
 export class Translator {
   /** @param {TranslationData} data */
-  constructor({ roadTsv, districtTsv }) {
+  constructor({ roadTsv, districtTsv, verify = null }) {
     this.roads = new PackedTable(roadTsv);
     this.places = new PackedTable(districtTsv);
+
+    // The bilingual tables are nationwide and carry no location, so 四維三路
+    // translates under 臺北市信義區 as readily as under the 高雄市苓雅區 it
+    // belongs to. `verify` is the second opinion that catches it — normally
+    // Directory.knowsRoad, which is why it is a callback rather than a
+    // Directory: the translator stays usable without the 4MB ZIP index.
+    /** @type {((address: string) => boolean) | null} */
+    this.verify = verify;
 
     /** @type {Map<string, string | null> | null} built on first use, see districtIndex() */
     this.districts = null;
@@ -237,6 +250,10 @@ export class Translator {
       return '';
     });
 
+    // Asked before the text is consumed, and of the whole address: whether a
+    // road exists is a question only its city and district can answer.
+    const located = this.verify === null || this.verify(text);
+
     // The city and district share one table entry ('Xinyi Dist., Taipei City'),
     // so they are resolved together once both are known.
     let city = Translator.longestPlace(text, (name) => {
@@ -335,11 +352,17 @@ export class Translator {
 
     if (zipcode) parts.zipcode = zipcode;
 
+    // Like Directory.find(), which returns '' rather than a ZIP code it is
+    // not sure of: `english` is only ever a fully translated address anchored
+    // to a county/city, and — where a verifier was supplied — one whose road
+    // that county and district actually have. Anything less comes back as ''
+    // with the salvageable fields still in `parts`.
+    const complete = untranslated.length === 0 && parts.city !== undefined && located;
     return {
-      english: formatEnglish(parts, country),
+      english: complete ? formatEnglish(parts, country) : '',
       parts,
       untranslated,
-      complete: untranslated.length === 0,
+      complete,
     };
   }
 }
@@ -373,7 +396,9 @@ export function formatEnglish(parts, country = DEFAULT_COUNTRY) {
  * @param {Partial<LoadTranslatorOptions>} [options]
  * @returns {Promise<Translator>}
  */
-export async function loadTranslator({ roadUrl, districtUrl, fetch: fetchImpl = globalThis.fetch } = {}) {
+export async function loadTranslator({
+  roadUrl, districtUrl, verify = null, fetch: fetchImpl = globalThis.fetch,
+} = {}) {
   if (typeof fetchImpl !== 'function') {
     throw new TypeError('A fetch implementation is required to load translation data.');
   }
@@ -394,5 +419,5 @@ export async function loadTranslator({ roadUrl, districtUrl, fetch: fetchImpl = 
     fetchText(roadUrl),
     fetchText(districtUrl),
   ]);
-  return new Translator({ roadTsv, districtTsv });
+  return new Translator({ roadTsv, districtTsv, verify });
 }

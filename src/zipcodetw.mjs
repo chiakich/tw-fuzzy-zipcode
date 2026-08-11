@@ -588,6 +588,46 @@ export class Directory {
     return addr.flat();
   }
 
+  // Whether the directory lists this address's road *at this location*. The
+  // bilingual tables are nationwide and location-blind, so 臺北市信義區四維三路
+  // translates as readily as the 高雄市苓雅區 street it actually is; this is the
+  // question that catches it. True when the address names no road at all —
+  // there is nothing to contradict — and for a 村里 that carries no road, which
+  // the precise index files without the village token just as lookup() does.
+  /**
+   * @param {string} addrStr
+   * @returns {boolean}
+   */
+  knowsRoad(addrStr) {
+    const addr = new Address(addrStr);
+    this.canonicalize(addr);
+    // Nothing past 縣市 + 鄉鎮市區, so no road name is being claimed.
+    if (addr.tokens.length <= 2) return true;
+
+    // A 村/里 means rural addressing, which the directory files by village
+    // rather than street: 南投縣中寮鄉永和村中正路 is absent from both indexes
+    // and is a real address all the same. Nothing here can be disproved.
+    for (let i = 2; i < addr.tokens.length; i++) {
+      if ('村里'.includes(addr.tokens[i][UNIT])) return true;
+    }
+
+    // Longest first, and never shorter than the road level, so a road the
+    // directory does not have here cannot pass on its city and district alone.
+    // Both indexes count: a named lane belongs to the road name ('東1巷') and
+    // startLenOf() splits it off unless a house number follows, while a road
+    // with no house-number rule of its own lives only in the gradual index.
+    for (let i = addr.tokens.length; i >= 3; i--) {
+      const key = addr.flat(i);
+      if (this.store.preciseHas(key) || this.store.gradualGet(key) !== undefined) return true;
+    }
+
+    // Silence only means something where the directory has something to say.
+    // It covers 臺北市信義區 street by street, so a road missing there is a
+    // road that is not there; it files 臺東縣太麻里鄉 as a prefix and no more,
+    // so the same silence about 大王村 is no evidence at all.
+    return this.store.gradualGet(addr.flat(2)) === undefined;
+  }
+
   /**
    * @param {string} addrStr
    * @returns {LookupResult | null}
@@ -595,7 +635,18 @@ export class Directory {
   lookup(addrStr) {
     const addr = new Address(addrStr);
     this.canonicalize(addr);
+    return this.resolveCanonical(addr);
+  }
 
+  // The rest of lookup(), split out so a caller that already has a
+  // canonicalized Address (see canonicalAndFind()) does not pay to
+  // canonicalize it again. Mutates `addr.tokens` past this point — a caller
+  // that still needs the address text should read it out first.
+  /**
+   * @param {Address} addr already run through canonicalize()
+   * @returns {LookupResult | null}
+   */
+  resolveCanonical(addr) {
     let lenAddrTokens = addr.tokens.length;
     const startLen = startLenOf(addr);
 
@@ -640,5 +691,23 @@ export class Directory {
   find(addrStr) {
     const match = this.lookup(addrStr);
     return match === null || match.resolution === 'prefix' ? '' : match.zipcode;
+  }
+
+  // canonical() and find() each canonicalize their own Address; a caller that
+  // wants both, such as translate() in node.mjs, would otherwise pay for it
+  // twice. Not part of the published API — same bargain as
+  // translate.mjs's stripAddressPrefix.
+  /**
+   * @param {string} addrStr
+   * @returns {{ canonical: string, zipcode: string }}
+   */
+  canonicalAndFind(addrStr) {
+    const addr = new Address(addrStr);
+    this.canonicalize(addr);
+    // Read before resolveCanonical() can mutate addr.tokens further.
+    const canonical = addr.flat();
+    const match = this.resolveCanonical(addr);
+    const zipcode = match === null || match.resolution === 'prefix' ? '' : match.zipcode;
+    return { canonical, zipcode };
   }
 }

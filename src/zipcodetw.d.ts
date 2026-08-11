@@ -74,6 +74,14 @@ export declare class Directory {
   find(address: string): string;
   /** Restores an omitted county/city or district when the address names only one place. */
   canonical(address: string): string;
+  /**
+   * Whether this address's road is one the directory has *at this location* —
+   * the check the nationwide bilingual tables cannot make. True whenever the
+   * directory has nothing to contradict: no road is named, or the address is
+   * a rural 村/里 one, which the directory files by village and not by street.
+   * Pass it as `verify` to a `Translator`.
+   */
+  knowsRoad(address: string): boolean;
 }
 
 /** Fetches both packaged data files and creates a browser-ready directory. */

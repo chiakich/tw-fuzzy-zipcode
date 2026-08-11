@@ -19,6 +19,25 @@
 東彰南路	Dongzhang S. Rd.
 東彰北路	Dongzhang N. Rd.
 
+#	--- Typos in the official file ----------------------------------------
+#	Wrong ordinals ('3th Farm'), and one 第 transliterated as 'Di' where the
+#	rest of its own series (下橫街第一巷..第三巷) drops it.
+三農場	3rd Farm
+第三農場	3rd Farm
+下橫街第三巷	3rd Ln., Xiaheng St.
+下橫街第四巷	4th Ln., Xiaheng St.
+第三十三號碼頭	33rd Wharf
+
+#	--- 地下層 rows the ZIP directory files under a road name --------------
+#	data/2606_01.csv puts a floor descriptor in its ROAD column on two rows
+#	(both streets also have a normal row of their own). Not in the official
+#	bilingual file, so the English below is inferred from the one precedent
+#	it does carry: 大同路地下商場 -> 'Underground Shopping Mall, Datong Rd.'
+#	Keyed on the whole string, lane included, so the parts stay in postal
+#	order rather than trailing the street name.
+花源一街地下層	Basement, Huayuan 1st St.
+麗園一街２巷地下層	Basement, Ln. 2, Liyuan 1st St.
+
 #	--- Roads the published file has not caught up with -------------------
 一秀街	Yixiu St.
 三舍1街	Sanshe 1st St.

@@ -630,7 +630,7 @@
 1	越街	Sanyue St.
 1	軒	Sanxuan
 2	里	Sanxuan Vil.
-1	農場	3th Farm
+1	農場	3rd Farm
 1	連路	Sanlian Rd.
 1	進4巷	Sanjin 4th Ln.
 2	6巷	Sanjin 6th Ln.
@@ -999,8 +999,8 @@
 2	街	Xiaheng St.
 3	第1巷	1st Ln., Xiaheng St.
 4	2巷	2nd Ln., Xiaheng St.
-4	3巷	3th Ln., Xiaheng St.
-4	4巷	Di 4th Ln., Xiaheng St.
+4	3巷	3rd Ln., Xiaheng St.
+4	4巷	4th Ln., Xiaheng St.
 2	路	Xiaheng Rd.
 1	水底	Xiashuidi
 1	泉路	Xiaquan Rd.
@@ -28165,7 +28165,7 @@ b	3弄	Juyi 3rd Aly., Ln. 430, Sec. 2, Yanping Rd.
 1	港村	Bengang Vil.
 0	第31號碼頭	31st Wharf
 2	2號碼頭	32nd Wharf
-2	3號碼頭	33th Wharf
+2	3號碼頭	33rd Wharf
 2	4號碼頭	34th Wharf
 2	5號碼頭	35th Wharf
 2	6號碼頭	36th Wharf
@@ -28212,7 +28212,7 @@ b	3弄	Juyi 3rd Aly., Ln. 430, Sec. 2, Yanping Rd.
 2	商場	3rd Market
 2	市場	3rd Market
 2	橫街	3rd Side St.
-2	農場	3th Farm
+2	農場	3rd Farm
 1	二商場	2nd Market
 2	富康農莊	Fukang 2nd Farm
 2	市場	2nd Market
@@ -30377,6 +30377,7 @@ b	3弄	Juyi 3rd Aly., Ln. 430, Sec. 2, Yanping Rd.
 2	路	Huaqi Rd.
 1	橋街	Huaqiao St.
 1	源1街	Huayuan 1st St.
+4	地下層	Basement, Huayuan 1st St.
 2	3街	Huayuan 3rd St.
 2	5街	Huayuan 5th St.
 2	7街	Huayuan 7th St.
@@ -36682,6 +36683,7 @@ b	3弄	Juyi 3rd Aly., Ln. 430, Sec. 2, Yanping Rd.
 2	里	Qilin Vil.
 0	麗園	Liyuan
 2	1街	Liyuan 1st St.
+4	2巷地下層	Basement, Ln. 2, Liyuan 1st St.
 2	2街	Liyuan 2nd St.
 2	路	Liyuan Rd.
 1	山街	Lishan St.

@@ -1,4 +1,5 @@
 import { loadDirectory } from '../src/zipcodetw.mjs';
+import { loadTranslator, stripAddressPrefix } from '../src/translate.mjs';
 
 const form = document.querySelector('#search-form');
 const input = document.querySelector('#address');
@@ -11,14 +12,28 @@ const QUERY_PARAM = 'q';
 const exampleAddresses = ['臺北市信義區市府路1號', '松山區', '台北市秀山街'];
 
 let directory;
+let translator;
 let debounceTimer;
 let closeSuggestionsTimer;
+let copyResetTimer;
 
+// Both indexes are fetched in parallel; the ZIP tables dwarf the bilingual
+// ones, so the translation costs little beyond what the lookup already pays.
 async function loadDemoDirectory() {
-  directory = await loadDirectory({
-    gradualUrl: '../data/gradual.tsv',
-    preciseUrl: '../data/precise.tsv',
-  });
+  [directory, translator] = await Promise.all([
+    loadDirectory({
+      gradualUrl: '../data/gradual.tsv',
+      preciseUrl: '../data/precise.tsv',
+    }),
+    loadTranslator({
+      roadUrl: '../data/road_en.tsv',
+      districtUrl: '../data/district_en.tsv',
+      // The bilingual tables carry no location, so 臺北市信義區四維三路 would
+      // translate as readily as the 高雄市苓雅區 street it really is. The ZIP
+      // index is loaded here anyway, so let it have the last word.
+      verify: (address) => directory.knowsRoad(address),
+    }),
+  ]);
 }
 
 // Keeps the address in the URL so a lookup can be linked or shared. replaceState,
@@ -30,11 +45,72 @@ function syncQueryParam(address) {
   history.replaceState(null, '', url);
 }
 
+// The browser translator does neither of the two things the Node entry point
+// does for it: fill in an omitted city/district, and look the ZIP code up.
+// Mirror src/node.mjs so the demo matches the documented behaviour.
+function translateAddress(address) {
+  const stripped = stripAddressPrefix(address);
+  return translator.translate(directory.canonical(stripped), {
+    zipcode: directory.find(stripped),
+  });
+}
+
+// An empty `english` means the library declined to guess, and the reason is
+// worth showing: it is the whole point of the no-romanization rule.
+function renderEnglish(translation) {
+  if (translation.english) {
+    const row = document.createElement('div');
+    row.className = 'english-row';
+
+    const line = document.createElement('p');
+    line.className = 'english';
+    line.textContent = translation.english;
+
+    const copy = document.createElement('button');
+    copy.type = 'button';
+    copy.className = 'copy-button';
+    copy.textContent = '複製';
+    copy.addEventListener('click', async () => {
+      try {
+        await navigator.clipboard.writeText(translation.english);
+        copy.textContent = '已複製';
+      } catch {
+        copy.textContent = '複製失敗';
+      }
+      clearTimeout(copyResetTimer);
+      copyResetTimer = setTimeout(() => { copy.textContent = '複製'; }, 1600);
+    });
+
+    row.append(line, copy);
+    return row;
+  }
+
+  const { untranslated, parts } = translation;
+  // Nothing was recognized at all: the ZIP message above already says so.
+  if (untranslated.length === 0 && !parts.city && !parts.district && !parts.road) {
+    return null;
+  }
+
+  // The three ways english comes back empty, in the order translate() checks.
+  const note = document.createElement('p');
+  note.className = 'english-missing';
+  if (untranslated.length > 0) {
+    note.textContent = `無法英譯：「${untranslated.join('」「')}」查無官方譯名，不以拼音推測。`;
+  } else if (!parts.city) {
+    note.textContent = '地址不足以定位到縣市，無法產生可寄達的英文地址。';
+  } else {
+    note.textContent = '郵遞區號目錄沒有這個行政區的這條路，可能是路名或縣市寫錯了。';
+  }
+  return note;
+}
+
 function showResult(address) {
-  const zipcode = directory.find(address);
+  const zipcode = directory.find(stripAddressPrefix(address));
+  const translation = translateAddress(address);
   syncQueryParam(address);
   result.hidden = false;
   result.replaceChildren();
+
   const message = document.createElement('p');
   if (zipcode) {
     rememberAddress(address);
@@ -43,12 +119,14 @@ function showResult(address) {
     code.className = 'zipcode';
     code.textContent = zipcode;
     message.append(code, ` ${address}`);
-    result.append(message);
   } else {
     message.className = 'not-found';
     message.textContent = '找不到相符的郵遞區號。請確認地址，或嘗試輸入更多資訊。';
-    result.append(message);
   }
+  result.append(message);
+
+  const english = renderEnglish(translation);
+  if (english) result.append(english);
 }
 
 function getRecentAddresses() {

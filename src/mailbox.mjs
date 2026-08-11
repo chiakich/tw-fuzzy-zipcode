@@ -54,9 +54,9 @@ export class Mailbox {
     const entry = this.table.get(match.groups.poName);
     if (entry === undefined) return null;
     const [zipcode, postOffice, city] = entry.split(US);
-    // Leading zeros are the writer's, not the box's: 第007號 is box 7.
-    const box = String(parseInt(match.groups.box, 10));
-    return { zipcode, box, postOffice, city };
+    // The box number is passed through as written, leading zeros and all:
+    // 第007號 is how the box is labelled, and the envelope should say the same.
+    return { zipcode, box: match.groups.box, postOffice, city };
   }
 
   /**

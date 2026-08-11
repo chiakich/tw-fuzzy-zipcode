@@ -290,7 +290,7 @@ test('the box number is read off the address, not the table', () => {
   const box = (n) => translate(`基隆愛三路郵局第${n}號信箱`).parts.poBox;
   assert.equal(box(5), 'P.O. Box 5');
   assert.equal(box(4321), 'P.O. Box 4321');
-  assert.equal(box('007'), 'P.O. Box 7');
+  assert.equal(box('007'), 'P.O. Box 007');
 });
 
 test('an office with no box open stays untranslated rather than inventing one', () => {

@@ -20,7 +20,7 @@ export interface LoadMailboxOptions {
 /** One packed row, plus the box number read off the address. */
 export interface MailboxRecord {
   zipcode: string;
-  /** Digits only, leading zeros stripped: 第007號 is box `'7'`. */
+  /** As written on the address, leading zeros kept: 第007號 is box `'007'`. */
   box: string;
   /** Official English name, without a 'Post Office' suffix: `'Keelung Ai 3rd Road'`. */
   postOffice: string;

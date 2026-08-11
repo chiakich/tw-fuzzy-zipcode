@@ -54,7 +54,7 @@ lookup('臺北市')
 
 ### 瀏覽器使用
 
-瀏覽器環境沒有 `fs`，請自行載入套件附帶的資料檔。`loadZipcode()` 會處理載入失敗並建立 `Zipcode`，它的方法與上面的函式同名：
+瀏覽器環境沒有 `fs`，Node 端自動處理的載入要自己來。`loadZipcode()` 會處理載入失敗並建立 `Zipcode`，它的方法與上一節的函式同名：
 
 ```js
 import { loadZipcode } from 'tw-fuzzy-zipcode/browser'
@@ -69,6 +69,61 @@ zip.find('基隆愛三路郵局第5號信箱')   // '200900'
 ```
 
 資料檔會隨 npm 套件發布；請在建置流程中將它們複製到網站可存取的位置。
+
+#### 三份字典
+
+套件的資料不是一份大字典，而是三份彼此獨立的，載你需要的那幾份就好：
+
+| 字典 | 檔案 | 大小 | 內容 |
+| ---- | ---- | ---- | ---- |
+| 門牌索引 | `gradual.tsv` + `precise.tsv` | 4.3 MB | 地址片段與門牌規則 → 郵遞區號 |
+| 信箱表 | `mailbox.tsv` | 46 KB | 郵局名稱 → 郵遞區號＋英文局名 |
+| 中英對照 | `road_en.tsv` + `district_en.tsv` | 846 KB | 路街與行政區名稱 → 英文 |
+
+分成三份是因為它們互不相依，而且**多數人用不到全部**。門牌索引佔了 4.3 MB、是其他兩份加起來的近五倍，只想英譯或只想查信箱的人不該為它付流量；反過來只想查郵遞區號的人也不必載中英對照。三份的來源與更新頻率也各自不同（見[資料來源](#資料來源與授權)）。
+
+沒有哪一份是「預設載入」的——瀏覽器端你載什麼就有什麼功能：
+
+| 你要做的 | 門牌索引 | 信箱表 | 中英對照 |
+| -------- | :------: | :----: | :------: |
+| `findAddress()` 查門牌郵遞區號 | 必要 | – | – |
+| `findMailbox()` 查信箱郵遞區號 | – | 必要 | – |
+| `find()` 兩種都查 | 必要 | 必要 | – |
+| `translate()` 英譯門牌地址 | 選用 ¹ | – | 必要 |
+| `translate()` 英譯信箱地址 | – | 必要 | 必要 ² |
+
+¹ 沒有它，`translate()` 仍可運作，但不會補齊省略的縣市／行政區、不會自動查郵遞區號，也不會交叉驗證路名（見[路名與地點的交叉驗證](#路名與地點的交叉驗證)）。Node 端因為本來就載了門牌索引，這三項預設全開。
+
+² 嚴格說信箱英譯不查中英對照表——英文局名整筆存在信箱表裡——但 `Translator` 的建構子本來就要求這兩個檔案，所以還是得載。
+
+全部載齊長這樣：
+
+```js
+import { loadZipcode } from 'tw-fuzzy-zipcode/browser'
+import { loadTranslator } from 'tw-fuzzy-zipcode/translate'
+
+const zip = await loadZipcode({
+  gradualUrl: '/data/gradual.tsv',
+  preciseUrl: '/data/precise.tsv',
+  mailboxUrl: '/data/mailbox.tsv',
+})
+const translator = await loadTranslator({
+  roadUrl: '/data/road_en.tsv',
+  districtUrl: '/data/district_en.tsv',
+  // 這兩個是選用的接線，對應上表的 ¹ 與 ²。
+  verify: (address) => zip.directory.knowsRoad(address),
+  mailbox: zip.mailbox,
+})
+```
+
+只要其中一份的話，三個入口分別是 `tw-fuzzy-zipcode/browser`（門牌＋信箱）、`tw-fuzzy-zipcode/mailbox`（只有信箱）、`tw-fuzzy-zipcode/translate`（只有中英對照）。分開的是**資料**：你只會下載自己載的那幾份 TSV。程式碼則有少量共用（`mailbox` 與 `translate` 都用到 `zipcodetw.mjs` 的 `PackedTable` 與 `normalize`），但那是幾 KB 的解碼與正規化邏輯，不是資料。
+
+```js
+import { loadMailbox } from 'tw-fuzzy-zipcode/mailbox'
+
+const mailbox = await loadMailbox({ mailboxUrl: '/data/mailbox.tsv' })
+mailbox.find('基隆愛三路郵局第5號信箱') // '200900'
+```
 
 ### 已經知道地址形式時
 
@@ -134,29 +189,7 @@ Node 入口本來就會載入郵遞區號目錄，所以 `translate()` 預設開
 
 `knowsRoad()` 只在目錄確定時才會否定該地址。地址若沒有指名路段、或屬於村里制的鄉村地址（郵政目錄按村里而非街道編制，`南投縣中寮鄉永和村中正路` 兩個索引都查不到卻是真實地址），一律視為通過。以內含目錄的 44,635 筆地址、四種書寫變形共 178,540 筆實測，誤殺 3 筆，全部落在釣魚臺列嶼的異常列上。
 
-瀏覽器同樣需要自行載入兩個資料檔：
-
-```js
-import { loadTranslator } from 'tw-fuzzy-zipcode/translate'
-
-const translator = await loadTranslator({
-  roadUrl: '/data/road_en.tsv',
-  districtUrl: '/data/district_en.tsv',
-})
-translator.translate('臺北市信義區市府路1號', { zipcode: '110204' }).english
-```
-
-瀏覽器版不會自動補上省略的縣市或行政區，也不會自動查郵遞區號；若需要這兩項，請先用 `Directory` 的 `canonical()` 與 `find()` 處理過再傳入。
-
-郵政信箱的英譯也是選用的，跟 `verify` 一樣要自己接上——沒接的話信箱地址會掉進路名比對，把「基隆愛三路郵局」讀成一條叫愛三路的街：
-
-```js
-const translator = await loadTranslator({
-  roadUrl: '/data/road_en.tsv',
-  districtUrl: '/data/district_en.tsv',
-  mailbox: await loadMailbox({ mailboxUrl: '/data/mailbox.tsv' }),
-})
-```
+瀏覽器端 `verify` 要自己接上，`mailbox` 也是——沒接 `mailbox` 的話，信箱地址會掉進路名比對，把「基隆愛三路郵局」讀成一條叫愛三路的街。兩者的接法見[三份字典](#三份字典)。
 
 ### 郵政信箱
 
@@ -183,15 +216,6 @@ translate('政大郵局第12號信箱').english
 此時 `parts` 是 `{ poBox, postOffice, city, zipcode }` 四個欄位，`road`、`district` 等門牌欄位不會出現——「基隆愛三路郵局」的「愛三路」是局名的一部分，不是地址所在的路。官方寫法沒有 `Post Office` 字樣，所以不加；`P.O. Box` 這個前綴在來源資料裡有七種不同寫法，無從照抄，統一成慣用的形式。
 
 信箱編號本身不影響郵遞區號，省略「第」或多餘空白都可以。共涵蓋 899 個實際開辦信箱的郵局：來源資料另有 314 個郵局雖已配賦六碼郵遞區號，但信箱狀態是「尚未開辦信箱」，這些一律回傳空字串——那個號碼看起來可以寄達，實際上寄不到。目前只涵蓋一般民用專用信箱；軍事特種信箱（例如「左營郵政九○○○○附○○號信箱」）尚未支援——這類地址的地名寫法太不規則（有時是「縣市+行政區」，有時是「行政區+地方俗名」，也可能只寫縣市，無法從文字本身可靠反推出正確的行政區），從地名猜測有猜錯的風險，比查不到還糟，因此暫不處理，回傳空字串。
-
-只需要信箱查詢的話，可以單獨載入那份 46KB 的資料，不必連帶載入 4.3MB 的門牌索引：
-
-```js
-import { loadMailbox } from 'tw-fuzzy-zipcode/mailbox'
-
-const mailbox = await loadMailbox({ mailboxUrl: '/data/mailbox.tsv' })
-mailbox.find('基隆愛三路郵局第5號信箱') // '200900'
-```
 
 ## 比對方式
 

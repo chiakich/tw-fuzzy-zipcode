@@ -113,7 +113,12 @@ function renderEnglish(translation) {
   const note = document.createElement('p');
   note.className = 'english-missing';
   if (untranslated.length > 0) {
-    note.textContent = `無法英譯：「${untranslated.join('」「')}」查無官方譯名，不以拼音推測。`;
+    // The fragments are not quoted back. When the address is a real one with
+    // one unlisted road they read fine, but anything the tokenizer could not
+    // make sense of comes apart into pieces that are not names at all —
+    // 左營華夏路郵局第5號信箱 offers 「左營華夏路郵局第」「信箱」 — and naming
+    // those explains nothing. `untranslated` is still there for callers.
+    note.textContent = '查無官方譯名，不以拼音推測。';
   } else if (!parts.city) {
     note.textContent = '地址不足以定位到縣市，無法產生可寄達的英文地址。';
   } else {

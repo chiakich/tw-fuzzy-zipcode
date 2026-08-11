@@ -12,6 +12,26 @@ import { PackedTable, normalize } from './zipcodetw.mjs';
 // ('OO郵局5號信箱'), so both are optional.
 const MAILBOX_RE = /^(?<poName>.+?郵局)第?\s*[0-9]+\s*號信箱$/u;
 
+// Callers that don't know which form an address is in run every door-number
+// lookup through find() first, so the reject has to be cheaper than the
+// trim/normalize/regex it guards. MAILBOX_RE demands the string end in 號信箱,
+// which settles it by reading the tail — but only after skipping what trim()
+// and normalize() would have removed there, or '第5號信箱，' would slip past.
+const XIN = 0x4fe1, XIANG = 0x7bb1; // 信, 箱
+const TRAILING = ' 　,，\t\n\r';
+
+/**
+ * @param {string} addrStr
+ * @returns {boolean} false only when MAILBOX_RE certainly won't match
+ */
+function couldBeMailbox(addrStr) {
+  let end = addrStr.length;
+  while (end > 0 && TRAILING.includes(addrStr[end - 1])) end -= 1;
+  return end >= 2
+    && addrStr.charCodeAt(end - 1) === XIANG
+    && addrStr.charCodeAt(end - 2) === XIN;
+}
+
 export class Mailbox {
   /** @param {MailboxData} data */
   constructor({ mailboxTsv }) {
@@ -23,6 +43,7 @@ export class Mailbox {
    * @returns {string} 6-digit ZIP code, or '' if this isn't a recognized P.O. box address
    */
   find(addrStr) {
+    if (!couldBeMailbox(addrStr)) return '';
     const match = normalize(addrStr.trim()).match(MAILBOX_RE);
     if (!match || !match.groups) return '';
     return this.table.get(match.groups.poName) ?? '';

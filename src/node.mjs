@@ -6,12 +6,15 @@ import { fileURLToPath } from 'node:url';
 import { Directory } from './zipcodetw.mjs';
 import { Translator, stripAddressPrefix } from './translate.mjs';
 import { Mailbox } from './mailbox.mjs';
+import { Zipcode } from './zipcode.mjs';
 
 export { Directory } from './zipcodetw.mjs';
 export { Translator, formatEnglish } from './translate.mjs';
 export { Mailbox } from './mailbox.mjs';
+export { Zipcode } from './zipcode.mjs';
 
 /** @import { LookupResult } from './zipcodetw.d.ts' */
+/** @import { MailboxLookupResult } from './mailbox.d.ts' */
 /** @import { TranslateOptions, TranslationResult } from './translate.d.ts' */
 
 /** @type {(name: string) => string} */
@@ -34,22 +37,6 @@ export function getDirectory() {
   return directory;
 }
 
-/**
- * @param {string} addrStr
- * @returns {string}
- */
-export function find(addrStr) {
-  return getDirectory().find(addrStr);
-}
-
-/**
- * @param {string} addrStr
- * @returns {LookupResult | null}
- */
-export function lookup(addrStr) {
-  return getDirectory().lookup(addrStr);
-}
-
 /** @type {Mailbox | undefined} */
 let mailbox;
 
@@ -61,17 +48,80 @@ export function getMailbox() {
   return mailbox;
 }
 
+/** @type {Zipcode | undefined} */
+let zipcode;
+
+// Composed from the two getters rather than from the files, so a caller that
+// touches only `findAddress()` never loads the mailbox table, and one that
+// mixes the entry points still holds a single copy of each index.
+/** @returns {Zipcode} */
+export function getZipcode() {
+  if (!zipcode) {
+    zipcode = new Zipcode({ directory: getDirectory(), mailbox: getMailbox() });
+  }
+  return zipcode;
+}
+
+// The functions below are the same six methods `Zipcode` exposes, bound to the
+// bundled data. The dispatch itself lives in ./zipcode.mjs so this entry point
+// and the browser one cannot drift apart.
+
 /**
- * Returns the 6-digit ZIP code for a P.O. box address ('OO郵局第N號信箱'), or
- * `''` if the address isn't in that form or names a post office this doesn't
- * recognize. Door-number addresses should use `find()` instead — the two
- * address forms don't overlap.
+ * Returns the ZIP code for either a door-number address or a P.O. box
+ * ('OO郵局第N號信箱') — the mix real, user-supplied addresses arrive in.
+ * Empty when the address can't be resolved past a bare prefix.
+ *
+ * @param {string} addrStr
+ * @returns {string}
+ */
+export function find(addrStr) {
+  return getZipcode().find(addrStr);
+}
+
+/**
+ * @param {string} addrStr
+ * @returns {LookupResult | MailboxLookupResult | null}
+ */
+export function lookup(addrStr) {
+  return getZipcode().lookup(addrStr);
+}
+
+/**
+ * Door-number addresses only, skipping the P.O. box check. Returns a usable
+ * 3- or 6-digit ZIP code; unresolved prefixes return an empty string.
+ *
+ * @param {string} addrStr
+ * @returns {string}
+ */
+export function findAddress(addrStr) {
+  return getDirectory().find(addrStr);
+}
+
+/**
+ * @param {string} addrStr
+ * @returns {LookupResult | null}
+ */
+export function lookupAddress(addrStr) {
+  return getDirectory().lookup(addrStr);
+}
+
+/**
+ * P.O. box addresses only. Returns the 6-digit ZIP code, or `''` if the
+ * address isn't in that form or names a post office this doesn't recognize.
  *
  * @param {string} addrStr
  * @returns {string}
  */
 export function findMailbox(addrStr) {
   return getMailbox().find(addrStr);
+}
+
+/**
+ * @param {string} addrStr
+ * @returns {MailboxLookupResult | null}
+ */
+export function lookupMailbox(addrStr) {
+  return getZipcode().lookupMailbox(addrStr);
 }
 
 /** @type {Translator | undefined} */

@@ -41,30 +41,40 @@ find('臺北市松江路100號')
 // '104091'，可省略縣市或行政區
 find('松江路100號')
 // '104091'，若路名唯一兩者都省略也可以
+find('基隆愛三路郵局第5號信箱')
+// '200900'，郵政信箱也一併處理
 
 lookup('臺北市')
 // { zipcode: '1', source: 'gradual', resolution: 'prefix' }
 ```
 
-`find(address)` 接受一個地址字串，只回傳可直接使用的 3 或 6 碼郵遞區號；無法確定有效郵遞區號或找不到時回傳空字串。套件不會回傳無效的 4 或 5 碼中間前綴。
+`find(address)` 接受一個地址字串，只回傳可直接使用的 3 或 6 碼郵遞區號；無法確定有效郵遞區號或找不到時回傳空字串。套件不會回傳無效的 4 或 5 碼中間前綴。它同時涵蓋門牌地址與郵政信箱，因為實際使用者輸入的地址往往兩種都有，呼叫端不需要自己先判斷。
 
-若介面需要顯示比對層級，請使用 `lookup(address)`。它回傳 `null` 或 `{ zipcode, source, resolution }`：`source` 是 `precise` 或 `gradual`，`resolution` 是 `six-digit`、`three-digit` 或 `prefix`。`prefix` 代表只辨識到縣市等不足以構成郵遞區號的資訊。
+若介面需要顯示比對層級，請使用 `lookup(address)`。它回傳 `null` 或 `{ zipcode, source, resolution }`：`source` 是 `precise`、`gradual` 或 `mailbox`，`resolution` 是 `six-digit`、`three-digit` 或 `prefix`。`prefix` 代表只辨識到縣市等不足以構成郵遞區號的資訊。
 
 ### 瀏覽器使用
 
-瀏覽器環境沒有 `fs`，請自行載入套件附帶的兩個資料檔。`loadDirectory()` 會處理載入失敗並建立 `Directory`：
+瀏覽器環境沒有 `fs`，請自行載入套件附帶的資料檔。`loadZipcode()` 會處理載入失敗並建立 `Zipcode`，它的方法與上面的函式同名：
 
 ```js
-import { loadDirectory } from 'tw-fuzzy-zipcode/browser'
+import { loadZipcode } from 'tw-fuzzy-zipcode/browser'
 
-const directory = await loadDirectory({
+const zip = await loadZipcode({
   gradualUrl: '/data/gradual.tsv',
   preciseUrl: '/data/precise.tsv',
+  mailboxUrl: '/data/mailbox.tsv',
 })
-directory.find('臺北市信義區市府路1號') // '110204'
+zip.find('臺北市信義區市府路1號')     // '110204'
+zip.find('基隆愛三路郵局第5號信箱')   // '200900'
 ```
 
 資料檔會隨 npm 套件發布；請在建置流程中將它們複製到網站可存取的位置。
+
+### 已經知道地址形式時
+
+如果你的資料來源保證只有其中一種形式，可以跳過另一種的檢查：`findAddress()` / `lookupAddress()` 只查門牌，`findMailbox()` / `lookupMailbox()` 只查信箱。Node 端是同名函式，瀏覽器端是 `Zipcode` 上的同名方法。
+
+不確定的話就用 `find()`。它在門牌地址上的額外成本落在量測雜訊裡（見 [`docs/benchmark.md`](docs/benchmark.md)），因為信箱比對在正規化之前就先用字尾否決了。
 
 ### 英文地址翻譯
 
@@ -140,20 +150,20 @@ translator.translate('臺北市信義區市府路1號', { zipcode: '110204' }).e
 
 ### 郵政信箱
 
-`findMailbox(address)` 查詢郵局專用信箱地址（例如「OO郵局第N號信箱」）的郵遞區號。這類地址不是門牌，跟 `find()` 走的是完全不同的資料與規則，所以是獨立的函式：
+郵局專用信箱地址（例如「OO郵局第N號信箱」）不是門牌，走的是完全不同的資料與規則：郵遞區號由郵局名稱直接對照得出，不經過門牌規則比對。`find()` 與 `lookup()` 已經涵蓋這類地址，`lookup()` 會以 `source: 'mailbox'` 標示：
 
 ```js
-import { findMailbox } from 'tw-fuzzy-zipcode'
+import { find, lookup } from 'tw-fuzzy-zipcode'
 
-findMailbox('基隆愛三路郵局第5號信箱')
+find('基隆愛三路郵局第5號信箱')
 // '200900'
-findMailbox('臺北市信義區市府路1號')
-// '' — 不是信箱地址
+lookup('基隆愛三路郵局第5號信箱')
+// { zipcode: '200900', source: 'mailbox', resolution: 'six-digit' }
 ```
 
-信箱編號本身不影響郵遞區號，省略「第」或多餘空白都可以。目前只涵蓋一般民用專用信箱；軍事特種信箱（例如「左營郵政九○○○○附○○號信箱」）尚未支援——這類地址的地名寫法太不規則（有時是「縣市+行政區」，有時是「行政區+地方俗名」，也可能只寫縣市，無法從文字本身可靠反推出正確的行政區），從地名猜測有猜錯的風險，比查不到還糟，因此暫不處理，回傳空字串。
+信箱編號本身不影響郵遞區號，省略「第」或多餘空白都可以。共涵蓋 899 個實際開辦信箱的郵局：來源資料另有 314 個郵局雖已配賦六碼郵遞區號，但信箱狀態是「尚未開辦信箱」，這些一律回傳空字串——那個號碼看起來可以寄達，實際上寄不到。目前只涵蓋一般民用專用信箱；軍事特種信箱（例如「左營郵政九○○○○附○○號信箱」）尚未支援——這類地址的地名寫法太不規則（有時是「縣市+行政區」，有時是「行政區+地方俗名」，也可能只寫縣市，無法從文字本身可靠反推出正確的行政區），從地名猜測有猜錯的風險，比查不到還糟，因此暫不處理，回傳空字串。
 
-瀏覽器版一樣要自行載入資料檔：
+只需要信箱查詢的話，可以單獨載入那份 20KB 的資料，不必連帶載入 4.3MB 的門牌索引：
 
 ```js
 import { loadMailbox } from 'tw-fuzzy-zipcode/mailbox'
@@ -182,10 +192,10 @@ mailbox.find('基隆愛三路郵局第5號信箱') // '200900'
 
 | 項目         | 結果                                                                         |
 | ------------ | ---------------------------------------------------------------------------- |
-| 傳輸大小     | Brotli 約 0.79 MB；gzip 約 1.20 MB                                           |
-| 載入資料索引 | 瀏覽器約 36 ms；Node 約 66 ms                                                |
+| 傳輸大小     | Brotli 約 0.79 MB；gzip 約 1.21 MB                                           |
+| 載入資料索引 | 瀏覽器約 34 ms；Node 約 56 ms                                                |
 | 載入後記憶體 | 瀏覽器約 5.3 MB；Node 約 21.5 MB                                             |
-| 單次查詢     | 約 1.9–2.2 µs                                                                |
+| 單次查詢     | 約 1.7–2.0 µs                                                                |
 | 正確性驗證   | 與 Python 參考實作進行 90,950 筆差異測試，4／5 碼中間前綴會正規化為合法 3 碼 |
 
 兩種索引實作的差異、量測方法與限制，詳見[效能量測](docs/benchmark.md)。

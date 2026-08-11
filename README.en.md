@@ -41,30 +41,40 @@ find('臺北市松江路100號')
 // '104091' — the city or the district may be omitted
 find('松江路100號')
 // '104091' — or both, if the road name is unique
+find('基隆愛三路郵局第5號信箱')
+// '200900' — P.O. boxes are covered too
 
 lookup('臺北市')
 // { zipcode: '1', source: 'gradual', resolution: 'prefix' }
 ```
 
-`find(address)` accepts an address string and returns only a usable 3- or 6-digit ZIP code. It returns an empty string when no usable ZIP code can be determined or no match is found. The package never returns an invalid 4- or 5-digit intermediate prefix.
+`find(address)` accepts an address string and returns only a usable 3- or 6-digit ZIP code. It returns an empty string when no usable ZIP code can be determined or no match is found. The package never returns an invalid 4- or 5-digit intermediate prefix. It covers both door-number addresses and P.O. boxes, because real user-supplied addresses arrive as a mix of the two and the caller shouldn't have to sort them out first.
 
-Use `lookup(address)` when the UI needs the matching detail. It returns `null` or `{ zipcode, source, resolution }`: `source` is `precise` or `gradual`, and `resolution` is `six-digit`, `three-digit`, or `prefix`. `prefix` means the match only identifies broad information, such as a city, and does not form a usable ZIP code.
+Use `lookup(address)` when the UI needs the matching detail. It returns `null` or `{ zipcode, source, resolution }`: `source` is `precise`, `gradual`, or `mailbox`, and `resolution` is `six-digit`, `three-digit`, or `prefix`. `prefix` means the match only identifies broad information, such as a city, and does not form a usable ZIP code.
 
 ### Browser usage
 
-Browsers do not have `fs`, so load the two packaged data files yourself. `loadDirectory()` handles loading failures and creates a `Directory`:
+Browsers do not have `fs`, so load the packaged data files yourself. `loadZipcode()` handles loading failures and creates a `Zipcode`, whose methods carry the same names as the functions above:
 
 ```js
-import { loadDirectory } from 'tw-fuzzy-zipcode/browser'
+import { loadZipcode } from 'tw-fuzzy-zipcode/browser'
 
-const directory = await loadDirectory({
+const zip = await loadZipcode({
   gradualUrl: '/data/gradual.tsv',
   preciseUrl: '/data/precise.tsv',
+  mailboxUrl: '/data/mailbox.tsv',
 })
-directory.find('臺北市信義區市府路1號') // '110204'
+zip.find('臺北市信義區市府路1號')    // '110204'
+zip.find('基隆愛三路郵局第5號信箱')  // '200900'
 ```
 
 The data files are included in the npm package; copy them to a location your site can serve during its build process.
+
+### When you already know the address form
+
+If your input is guaranteed to be one form, you can skip the check for the other: `findAddress()` / `lookupAddress()` handle door-number addresses only, and `findMailbox()` / `lookupMailbox()` handle P.O. boxes only. They are plain functions on Node and identically named methods on `Zipcode` in the browser.
+
+When in doubt, use `find()`. Its extra cost on door-number addresses sits inside the measurement noise (see [`docs/benchmark.md`](docs/benchmark.md)) because the P.O. box match rejects them by their tail, before any normalization.
 
 ### English address translation
 
@@ -138,20 +148,20 @@ The browser translator neither restores an omitted city or district nor looks up
 
 ### P.O. box addresses
 
-`findMailbox(address)` looks up the ZIP code for a Chunghwa Post P.O. box address ('OO郵局第N號信箱'). These aren't door-number addresses, so they run on entirely different data and rules than `find()` — hence the separate function:
+Chunghwa Post P.O. box addresses ('OO郵局第N號信箱') aren't door-number addresses, so they run on entirely different data and rules: the ZIP code comes straight from the post office's name and never touches the door-number rules. `find()` and `lookup()` already cover them, and `lookup()` labels them with `source: 'mailbox'`:
 
 ```js
-import { findMailbox } from 'tw-fuzzy-zipcode'
+import { find, lookup } from 'tw-fuzzy-zipcode'
 
-findMailbox('基隆愛三路郵局第5號信箱')
+find('基隆愛三路郵局第5號信箱')
 // '200900'
-findMailbox('臺北市信義區市府路1號')
-// '' — not a P.O. box address
+lookup('基隆愛三路郵局第5號信箱')
+// { zipcode: '200900', source: 'mailbox', resolution: 'six-digit' }
 ```
 
-The box number itself doesn't affect the ZIP code; omitting 第 or extra whitespace is fine. Only ordinary civilian P.O. boxes are covered so far. Military special mailboxes (e.g. '左營郵政九○○○○附○○號信箱') aren't supported yet — their place names are too irregular to parse reliably (sometimes "county+district", sometimes "district+informal local name", sometimes just a bare county name with nothing to pin down the district), so guessing from the text risks a wrong answer, which is worse than no answer. Those addresses return an empty string for now.
+The box number itself doesn't affect the ZIP code; omitting 第 or extra whitespace is fine. 899 post offices with a box actually open are covered. The source data lists another 314 that have been assigned a 6-digit code but whose box status is 「尚未開辦信箱」 — no box open yet; those return an empty string, because that code looks deliverable and isn't. Only ordinary civilian P.O. boxes are covered so far. Military special mailboxes (e.g. '左營郵政九○○○○附○○號信箱') aren't supported yet — their place names are too irregular to parse reliably (sometimes "county+district", sometimes "district+informal local name", sometimes just a bare county name with nothing to pin down the district), so guessing from the text risks a wrong answer, which is worse than no answer. Those addresses return an empty string for now.
 
-The browser build loads its own data file the same way:
+If P.O. boxes are all you need, load that 20KB table on its own rather than pulling in the 4.3MB door-number index with it:
 
 ```js
 import { loadMailbox } from 'tw-fuzzy-zipcode/mailbox'
@@ -180,10 +190,10 @@ The matcher compares address fragments and house-number rules in order, includin
 
 | Metric            | Result                                                                                                                                   |
 | ----------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
-| Transfer size     | About 0.79 MB Brotli; 1.20 MB gzip                                                                                                       |
-| Index build       | About 36 ms in the browser; 66 ms on Node                                                                                                |
+| Transfer size     | About 0.79 MB Brotli; 1.21 MB gzip                                                                                                       |
+| Index build       | About 34 ms in the browser; 56 ms on Node                                                                                                |
 | Memory after load | About 5.3 MB in the browser; 21.5 MB on Node                                                                                             |
-| Lookup            | About 1.9–2.2 µs per lookup                                                                                                              |
+| Lookup            | About 1.7–2.0 µs per lookup                                                                                                              |
 | Verification      | 90,950 differential queries against the Python reference; invalid 4-/5-digit intermediate prefixes are normalized to valid 3-digit codes |
 
 For the two index implementations, the measurement method, and its caveats, see the [benchmark](docs/benchmark.md) (written in Chinese).

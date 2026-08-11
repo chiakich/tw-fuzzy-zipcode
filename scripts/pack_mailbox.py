@@ -8,8 +8,16 @@ Source (政府資料開放授權條款-第1版):
                         Updated daily by Chunghwa Post; re-download to refresh.
 
 Maps each post office's Chinese name (局名) to its box's 6-digit ZIP code
-(六碼郵遞區號). Rows still on the legacy 5-digit code with no box open yet
-('尚未開辦信箱') are dropped — they have no 6-digit code to key on.
+(六碼郵遞區號). Two kinds of row are dropped:
+
+  * no 6-digit code to key on, and
+  * 信箱中文名稱 is '尚未開辦信箱' — the office is listed and has been assigned
+    a code, but no box is open there. 314 of those carry a 6-digit code all the
+    same, so keying on the code alone would answer '左營華夏路郵局第5號信箱'
+    with a deliverable-looking ZIP for an address that cannot receive mail.
+    They are also exactly the rows whose 信箱英文名稱 is blank, which is the
+    same fact from the other side: there is no box, so there is nothing to
+    write on it.
 
 Keys are normalized the same way as scripts/pack_en.py, for the same reason:
 lookups happen on tokens already run through src/zipcodetw.mjs `normalize()`.
@@ -76,12 +84,15 @@ def read_mailbox_csv(path):
 def build(data_dir):
     data_dir = Path(data_dir)
 
-    mapping, dropped, conflicts = {}, 0, 0
+    mapping, dropped, unopened, conflicts = {}, 0, 0, 0
     for row in read_mailbox_csv(data_dir / 'mailbox.csv'):
         name = row['局名'].strip()
         zipcode = row['六碼郵遞區號'].strip()
         if not name or not re.fullmatch(r'\d{6}', zipcode):
             dropped += 1
+            continue
+        if '尚未開辦' in row['信箱中文名稱']:
+            unopened += 1
             continue
         key = normalize(name)
         if key in mapping and mapping[key] != zipcode:
@@ -91,7 +102,9 @@ def build(data_dir):
         mapping[key] = zipcode
 
     if dropped:
-        print('  mailbox: skipped %d row(s) without a box open yet' % dropped)
+        print('  mailbox: skipped %d row(s) without a 6-digit code' % dropped)
+    if unopened:
+        print('  mailbox: skipped %d office(s) with no box open yet' % unopened)
     if conflicts:
         print('  mailbox: %d name collision(s), first value kept' % conflicts)
 

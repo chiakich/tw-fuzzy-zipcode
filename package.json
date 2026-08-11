@@ -12,8 +12,8 @@
       "default": "./src/node.mjs"
     },
     "./browser": {
-      "types": "./src/zipcodetw.d.ts",
-      "default": "./src/zipcodetw.mjs"
+      "types": "./src/browser.d.ts",
+      "default": "./src/browser.mjs"
     },
     "./translate": {
       "types": "./src/translate.d.ts",

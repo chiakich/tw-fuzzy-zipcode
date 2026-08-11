@@ -1,4 +1,4 @@
-import { loadDirectory } from '../src/zipcodetw.mjs';
+import { Zipcode, loadDirectory, loadMailbox } from '../src/browser.mjs';
 import { loadTranslator, stripAddressPrefix } from '../src/translate.mjs';
 
 const form = document.querySelector('#search-form');
@@ -9,31 +9,46 @@ const suggestions = document.querySelector('#suggestions');
 
 const RECENT_ADDRESSES_KEY = 'tw-fuzzy-zipcode.recent-addresses';
 const QUERY_PARAM = 'q';
-const exampleAddresses = ['臺北市信義區市府路1號', '松山區', '台北市秀山街'];
+const exampleAddresses = [
+  '臺北市信義區市府路1號', '松山區', '台北市秀山街', '基隆愛三路郵局第5號信箱',
+];
 
-let directory;
+let zip;
 let translator;
 let debounceTimer;
 let closeSuggestionsTimer;
 let copyResetTimer;
 
-// Both indexes are fetched in parallel; the ZIP tables dwarf the bilingual
-// ones, so the translation costs little beyond what the lookup already pays.
+// Every index is fetched in parallel; the ZIP tables dwarf the bilingual ones,
+// so the translation costs little beyond what the lookup already pays.
+//
+// Built from the pieces rather than through loadZipcode() only because the
+// translator needs the box table too: at 46KB it lands well before the 4.3MB
+// door-number index, so awaiting it first costs nothing and lets the two big
+// downloads still overlap.
 async function loadDemoDirectory() {
+  const directoryLoad = loadDirectory({
+    gradualUrl: '../data/gradual.tsv',
+    preciseUrl: '../data/precise.tsv',
+  });
+  const mailbox = await loadMailbox({ mailboxUrl: '../data/mailbox.tsv' });
+
+  let directory;
   [directory, translator] = await Promise.all([
-    loadDirectory({
-      gradualUrl: '../data/gradual.tsv',
-      preciseUrl: '../data/precise.tsv',
-    }),
+    directoryLoad,
     loadTranslator({
       roadUrl: '../data/road_en.tsv',
       districtUrl: '../data/district_en.tsv',
       // The bilingual tables carry no location, so 臺北市信義區四維三路 would
       // translate as readily as the 高雄市苓雅區 street it really is. The ZIP
       // index is loaded here anyway, so let it have the last word.
-      verify: (address) => directory.knowsRoad(address),
+      verify: (address) => zip.directory.knowsRoad(address),
+      // Without this a P.O. box falls through to the road tables, which read
+      // 基隆愛三路郵局 as a street called 愛三路.
+      mailbox,
     }),
   ]);
+  zip = new Zipcode({ directory, mailbox });
 }
 
 // Keeps the address in the URL so a lookup can be linked or shared. replaceState,
@@ -50,8 +65,11 @@ function syncQueryParam(address) {
 // Mirror src/node.mjs so the demo matches the documented behaviour.
 function translateAddress(address) {
   const stripped = stripAddressPrefix(address);
-  return translator.translate(directory.canonical(stripped), {
-    zipcode: directory.find(stripped),
+  // A box address carries its own ZIP and English, and canonical() would read
+  // the office's name as a street; hand it straight over, as src/node.mjs does.
+  if (zip.mailbox.parse(stripped)) return translator.translate(stripped);
+  return translator.translate(zip.directory.canonical(stripped), {
+    zipcode: zip.findAddress(stripped),
   });
 }
 
@@ -105,7 +123,7 @@ function renderEnglish(translation) {
 }
 
 function showResult(address) {
-  const zipcode = directory.find(stripAddressPrefix(address));
+  const zipcode = zip.find(stripAddressPrefix(address));
   const translation = translateAddress(address);
   syncQueryParam(address);
   result.hidden = false;
@@ -234,7 +252,7 @@ function scheduleLookup() {
     return;
   }
   debounceTimer = setTimeout(() => {
-    if (directory) showResult(address);
+    if (zip) showResult(address);
   }, 250);
 }
 
@@ -242,7 +260,7 @@ form.addEventListener('submit', (event) => {
   event.preventDefault();
   clearTimeout(debounceTimer);
   const address = input.value.trim();
-  if (address && directory) showResult(address);
+  if (address && zip) showResult(address);
 });
 
 input.addEventListener('input', () => {

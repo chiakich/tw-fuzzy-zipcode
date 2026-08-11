@@ -5,9 +5,11 @@ import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { Directory } from './zipcodetw.mjs';
 import { Translator, stripAddressPrefix } from './translate.mjs';
+import { Mailbox } from './mailbox.mjs';
 
 export { Directory } from './zipcodetw.mjs';
 export { Translator, formatEnglish } from './translate.mjs';
+export { Mailbox } from './mailbox.mjs';
 
 /** @import { LookupResult } from './zipcodetw.d.ts' */
 /** @import { TranslateOptions, TranslationResult } from './translate.d.ts' */
@@ -46,6 +48,30 @@ export function find(addrStr) {
  */
 export function lookup(addrStr) {
   return getDirectory().lookup(addrStr);
+}
+
+/** @type {Mailbox | undefined} */
+let mailbox;
+
+/** @returns {Mailbox} */
+export function getMailbox() {
+  if (!mailbox) {
+    mailbox = new Mailbox({ mailboxTsv: readFileSync(dataPath('mailbox.tsv'), 'utf8') });
+  }
+  return mailbox;
+}
+
+/**
+ * Returns the 6-digit ZIP code for a P.O. box address ('OO郵局第N號信箱'), or
+ * `''` if the address isn't in that form or names a post office this doesn't
+ * recognize. Door-number addresses should use `find()` instead — the two
+ * address forms don't overlap.
+ *
+ * @param {string} addrStr
+ * @returns {string}
+ */
+export function findMailbox(addrStr) {
+  return getMailbox().find(addrStr);
 }
 
 /** @type {Translator | undefined} */

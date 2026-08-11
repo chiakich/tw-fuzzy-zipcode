@@ -136,6 +136,30 @@ translator.translate('臺北市信義區市府路1號', { zipcode: '110204' }).e
 
 The browser translator neither restores an omitted city or district nor looks up ZIP codes; run the address through `Directory`'s `canonical()` and `find()` first if you need either.
 
+### P.O. box addresses
+
+`findMailbox(address)` looks up the ZIP code for a Chunghwa Post P.O. box address ('OO郵局第N號信箱'). These aren't door-number addresses, so they run on entirely different data and rules than `find()` — hence the separate function:
+
+```js
+import { findMailbox } from 'tw-fuzzy-zipcode'
+
+findMailbox('基隆愛三路郵局第5號信箱')
+// '200900'
+findMailbox('臺北市信義區市府路1號')
+// '' — not a P.O. box address
+```
+
+The box number itself doesn't affect the ZIP code; omitting 第 or extra whitespace is fine. Only ordinary civilian P.O. boxes are covered so far. Military special mailboxes (e.g. '左營郵政九○○○○附○○號信箱') aren't supported yet — their place names are too irregular to parse reliably (sometimes "county+district", sometimes "district+informal local name", sometimes just a bare county name with nothing to pin down the district), so guessing from the text risks a wrong answer, which is worse than no answer. Those addresses return an empty string for now.
+
+The browser build loads its own data file the same way:
+
+```js
+import { loadMailbox } from 'tw-fuzzy-zipcode/mailbox'
+
+const mailbox = await loadMailbox({ mailboxUrl: '/data/mailbox.tsv' })
+mailbox.find('基隆愛三路郵局第5號信箱') // '200900'
+```
+
 ## How matching works
 
 1. The input is normalized for 台／臺, full-width characters, and common Chinese numeral forms.
@@ -185,6 +209,8 @@ The published files lag the post office's own online lookup — 東彰南路 is 
 
 `npm run build:en` converts all four into `data/road_en.tsv` and `data/district_en.tsv`.
 
+`data/mailbox.csv` ([郵局專用信箱一覽表](https://data.gov.tw/dataset/27770)) also comes from Chunghwa Post, published on Taiwan's open data platform under the Open Government Data License, version 1.0, and updated daily. It covers 1,213 P.O. boxes currently open nationwide. `npm run build:mailbox` converts it to `data/mailbox.tsv`.
+
 ## Development and verification
 
 The project has no runtime dependencies. Rebuilding the data or refreshing the test fixture requires Python and the original Python reference package:
@@ -194,6 +220,7 @@ python3 scripts/dbf_to_csv.py rall1.dbf data/2606_01.csv
 pip install zipcodetw
 npm run build
 npm run build:en
+npm run build:mailbox
 npm run build:golden
 npm run typecheck
 npm test

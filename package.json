@@ -18,6 +18,10 @@
     "./translate": {
       "types": "./src/translate.d.ts",
       "default": "./src/translate.mjs"
+    },
+    "./mailbox": {
+      "types": "./src/mailbox.d.ts",
+      "default": "./src/mailbox.mjs"
     }
   },
   "files": [
@@ -26,7 +30,8 @@
     "data/gradual.tsv",
     "data/precise.tsv",
     "data/road_en.tsv",
-    "data/district_en.tsv"
+    "data/district_en.tsv",
+    "data/mailbox.tsv"
   ],
   "scripts": {
     "test": "npm run typecheck && node --test test/*.js",
@@ -34,6 +39,7 @@
     "typecheck": "tsc --project tsconfig.json",
     "build": "python3 scripts/pack.py data/2606_01.csv data",
     "build:en": "python3 scripts/pack_en.py data",
+    "build:mailbox": "python3 scripts/pack_mailbox.py data",
     "build:golden": "python3 scripts/build_golden_fixture.py data/2606_01.csv test/fixtures/golden_find.tsv"
   },
   "keywords": [

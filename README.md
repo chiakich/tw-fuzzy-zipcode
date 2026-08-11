@@ -138,6 +138,30 @@ translator.translate('臺北市信義區市府路1號', { zipcode: '110204' }).e
 
 瀏覽器版不會自動補上省略的縣市或行政區，也不會自動查郵遞區號；若需要這兩項，請先用 `Directory` 的 `canonical()` 與 `find()` 處理過再傳入。
 
+### 郵政信箱
+
+`findMailbox(address)` 查詢郵局專用信箱地址（例如「OO郵局第N號信箱」）的郵遞區號。這類地址不是門牌，跟 `find()` 走的是完全不同的資料與規則，所以是獨立的函式：
+
+```js
+import { findMailbox } from 'tw-fuzzy-zipcode'
+
+findMailbox('基隆愛三路郵局第5號信箱')
+// '200900'
+findMailbox('臺北市信義區市府路1號')
+// '' — 不是信箱地址
+```
+
+信箱編號本身不影響郵遞區號，省略「第」或多餘空白都可以。目前只涵蓋一般民用專用信箱；軍事特種信箱（例如「左營郵政九○○○○附○○號信箱」）尚未支援——這類地址的地名寫法太不規則（有時是「縣市+行政區」，有時是「行政區+地方俗名」，也可能只寫縣市，無法從文字本身可靠反推出正確的行政區），從地名猜測有猜錯的風險，比查不到還糟，因此暫不處理，回傳空字串。
+
+瀏覽器版一樣要自行載入資料檔：
+
+```js
+import { loadMailbox } from 'tw-fuzzy-zipcode/mailbox'
+
+const mailbox = await loadMailbox({ mailboxUrl: '/data/mailbox.tsv' })
+mailbox.find('基隆愛三路郵局第5號信箱') // '200900'
+```
+
 ## 比對方式
 
 1. 先正規化地址中的「台／臺」、全半形與常見中文數字寫法。
@@ -187,6 +211,8 @@ translator.translate('臺北市信義區市府路1號', { zipcode: '110204' }).e
 
 `npm run build:en` 會把這四個檔案轉成 `data/road_en.tsv` 與 `data/district_en.tsv`。
 
+`data/mailbox.csv`（[郵局專用信箱一覽表](https://data.gov.tw/dataset/27770)）同樣來自中華郵政，在政府資料開放平臺以「政府資料開放授權條款－第 1 版」發布、每日更新，涵蓋全台 1,213 個已開辦的專用信箱。`npm run build:mailbox` 會把它轉成 `data/mailbox.tsv`。
+
 ## 開發與驗證
 
 專案不需要執行期相依套件。若要重建資料或更新測試基準，需安裝 Python 與原始 Python 參考套件：
@@ -196,6 +222,7 @@ python3 scripts/dbf_to_csv.py rall1.dbf data/2606_01.csv
 pip install zipcodetw
 npm run build
 npm run build:en
+npm run build:mailbox
 npm run build:golden
 npm run typecheck
 npm test

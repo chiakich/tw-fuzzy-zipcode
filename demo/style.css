@@ -101,6 +101,14 @@ button { font: inherit; cursor: pointer; }
 .zipcode { color: var(--accent); font-size: 24px; font-weight: 650; letter-spacing: 0.05em; }
 .not-found { margin: 0; font-size: 15px; line-height: 1.6; }
 
+/* The English address is a separate answer, so it gets its own rule above it. */
+.english-row, .english-missing { margin-top: 14px; padding-top: 14px; border-top: 1px solid var(--border); }
+.english-row { display: flex; align-items: flex-start; gap: 12px; }
+.english { flex: 1; margin: 0; font-size: 15px; line-height: 1.6; overflow-wrap: anywhere; }
+.copy-button { flex: none; padding: 6px 12px; border: 1px solid var(--border); border-radius: 8px; background: transparent; color: var(--muted); font-size: 13px; }
+.copy-button:hover { color: var(--text); }
+.english-missing { margin-bottom: 0; color: var(--muted); font-size: 14px; line-height: 1.6; }
+
 footer { display: flex; flex-wrap: wrap; justify-content: center; gap: 7px; padding: 24px; color: var(--muted); font-size: 12px; text-align: center; }
 footer a { color: inherit; text-underline-offset: 3px; }
 

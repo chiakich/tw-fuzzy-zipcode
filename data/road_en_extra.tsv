@@ -1,0 +1,446 @@
+#	Hand-maintained overrides, applied on top of the postal files by
+#	scripts/pack_en.py. Use this for names the published files omit, so
+#	re-downloading the official data never discards them.
+#
+#	Format: Chinese name <TAB> English. Write the Chinese as it appears in an
+#	address; pack_en.py normalizes it the same way it does every other key.
+#
+#	Romanization follows Hanyu Pinyin and the conventions the postal files
+#	themselves use:
+#	  - ü is written u          綠 -> Lu, 女 -> Nu (per 女中路 'Nuzhong Rd.')
+#	  - the name is joined      大埔美園區一路 -> 'Dapumeiyuanqu 1st Rd.'
+#	  - numbers become ordinals 一 -> 1st, 廿七 -> 27th
+#	  - 橫巷 -> Side Ln., 新村 -> New Vil., 山莊 -> Villa, 大樓 -> Bldg.
+#	  - a direction that modifies a complete name is abbreviated
+#	                            五光南一街 -> 'Wuguang S. 1st St.'
+#
+#	東彰南路/東彰北路 are absent from the road file entirely (not even by
+#	section), but the post office's own online lookup returns these.
+東彰南路	Dongzhang S. Rd.
+東彰北路	Dongzhang N. Rd.
+
+#	--- Typos in the official file ----------------------------------------
+#	Wrong ordinals ('3th Farm'), and one 第 transliterated as 'Di' where the
+#	rest of its own series (下橫街第一巷..第三巷) drops it.
+三農場	3rd Farm
+第三農場	3rd Farm
+下橫街第三巷	3rd Ln., Xiaheng St.
+下橫街第四巷	4th Ln., Xiaheng St.
+第三十三號碼頭	33rd Wharf
+
+#	--- 地下層 rows the ZIP directory files under a road name --------------
+#	data/2606_01.csv puts a floor descriptor in its ROAD column on two rows
+#	(both streets also have a normal row of their own). Not in the official
+#	bilingual file, so the English below is inferred from the one precedent
+#	it does carry: 大同路地下商場 -> 'Underground Shopping Mall, Datong Rd.'
+#	Keyed on the whole string, lane included, so the parts stay in postal
+#	order rather than trailing the street name.
+花源一街地下層	Basement, Huayuan 1st St.
+麗園一街２巷地下層	Basement, Ln. 2, Liyuan 1st St.
+
+#	--- Roads the published file has not caught up with -------------------
+一秀街	Yixiu St.
+三舍1街	Sanshe 1st St.
+三舍2街	Sanshe 2nd St.
+上和路	Shanghe Rd.
+中運路	Zhongyun Rd.
+五光南1街	Wuguang S. 1st St.
+五光南2街	Wuguang S. 2nd St.
+五心路	Wuxin Rd.
+仁化工6路	Renhuagong 6th Rd.
+仁發1路	Renfa 1st Rd.
+仁發2路	Renfa 2nd Rd.
+仁發3路	Renfa 3rd Rd.
+仁發5路	Renfa 5th Rd.
+仁發6路	Renfa 6th Rd.
+介壽1路	Jieshou 1st Rd.
+保信路	Baoxin Rd.
+信美1路	Xinmei 1st Rd.
+信美2路	Xinmei 2nd Rd.
+信美3路	Xinmei 3rd Rd.
+信美5路	Xinmei 5th Rd.
+信美6路	Xinmei 6th Rd.
+信美7路	Xinmei 7th Rd.
+信美8路	Xinmei 8th Rd.
+信美9路	Xinmei 9th Rd.
+信美十路	Xinmei 10th Rd.
+信美11路	Xinmei 11th Rd.
+信美12路	Xinmei 12th Rd.
+僑興1街	Qiaoxing 1st St.
+僑興路	Qiaoxing Rd.
+八青2路	Baqing 2nd Rd.
+八青3路	Baqing 3rd Rd.
+公園5路	Gongyuan 5th Rd.
+公園6路	Gongyuan 6th Rd.
+六戈路	Liuge Rd.
+再興街	Zaixing St.
+功學2街	Gongxue 2nd St.
+十三股路	Shisangu Rd.
+十九結路	Shijiujie Rd.
+十八甲路	Shibajia Rd.
+南宮路	Nangong Rd.
+原佃5街	Yuandian 5th St.
+吉安3街	Ji'an 3rd St.
+吉昌2路	Jichang 2nd Rd.
+向心南3街	Xiangxin S. 3rd St.
+啟航2路	Qihang 2nd Rd.
+善福1街	Shanfu 1st St.
+善福2路	Shanfu 2nd Rd.
+善福大道	Shanfu Blvd.
+善美2街	Shanmei 2nd St.
+善美3街	Shanmei 3rd St.
+善美大道	Shanmei Blvd.
+喜元街	Xiyuan St.
+嘉科1路	Jiake 1st Rd.
+嘉科5路	Jiake 5th Rd.
+嘉運1路	Jiayun 1st Rd.
+嘉運2路	Jiayun 2nd Rd.
+園區北路	Yuanqu N. Rd.
+坤慶1街	Kunqing 1st St.
+埔園1路	Puyuan 1st Rd.
+埔工1路	Pugong 1st Rd.
+埔心1路	Puxin 1st Rd.
+埔心6路	Puxin 6th Rd.
+埔航路	Puhang Rd.
+堤塘南路	Titang S. Rd.
+士科路	Shike Rd.
+壯11路	Zhuang 11th Rd.
+壯12路	Zhuang 12th Rd.
+壯13路	Zhuang 13th Rd.
+壯15路	Zhuang 15th Rd.
+壯16路	Zhuang 16th Rd.
+壯17路	Zhuang 17th Rd.
+壯18路	Zhuang 18th Rd.
+壯19路	Zhuang 19th Rd.
+外中街	Waizhong St.
+大墩南2街	Dadun S. 2nd St.
+大洋街	Dayang St.
+大目降大道	Damujiang Blvd.
+天玄街	Tianxuan St.
+媽祖街	Mazu St.
+宅興1街	Zhaixing 1st St.
+安佃5街	Andian 5th St.
+安佃11街	Andian 11th St.
+安定東路	Anding E. Rd.
+安富2街	Anfu 2nd St.
+宜科南1路	Yike S. 1st Rd.
+富園2路	Fuyuan 2nd Rd.
+富德路	Fude Rd.
+富成街	Fucheng St.
+富永路	Fuyong Rd.
+富泰路	Futai Rd.
+富良野街	Fuliangye St.
+京都街	Jingdu St.
+土浦街	Tupu St.
+富華路	Fuhua Rd.
+富觀1街	Fuguan 1st St.
+富觀2街	Fuguan 2nd St.
+富觀街	Fuguan St.
+射埔路	Shepu Rd.
+尚頂2街	Shangding 2nd St.
+屏北路	Pingbei Rd.
+崇美路	Chongmei Rd.
+崙安路	Lun'an Rd.
+崙工北5路	Lungong N. 5th Rd.
+嶺拔林街	Lingbalin St.
+工名路	Gongming Rd.
+市民街	Shimin St.
+平道2路	Pingdao 2nd Rd.
+平道十路	Pingdao 10th Rd.
+平道12路	Pingdao 12th Rd.
+平道16街	Pingdao 16th St.
+平道18街	Pingdao 18th St.
+幸福2街	Xingfu 2nd St.
+庄仁街	Zhuangren St.
+庄德街	Zhuangde St.
+廣場3街	Guangchang 3rd St.
+廣順街	Guangshun St.
+張厝街	Zhangcuo St.
+後庄7路	Houzhuang 7th Rd.
+復安1街	Fu'an 1st St.
+復安2街	Fu'an 2nd St.
+復安3街	Fu'an 3rd St.
+復安6街	Fu'an 6th St.
+復興北1路	Fuxing N. 1st Rd.
+德和1街	Dehe 1st St.
+德和2街	Dehe 2nd St.
+德尚1路	Deshang 1st Rd.
+德尚2路	Deshang 2nd Rd.
+德治路	Dezhi Rd.
+德義2路	Deyi 2nd Rd.
+德財1街	Decai 1st St.
+恒西1街	Hengxi 1st St.
+恒龍路	Henglong Rd.
+惠來6街	Huilai 6th St.
+慶州街	Qingzhou St.
+慶順1街	Qingshun 1st St.
+慶順路	Qingshun Rd.
+成洲6路	Chengzhou 6th Rd.
+捷航3路	Jiehang 3rd Rd.
+故宮東路	Gugong E. Rd.
+敦化2街	Dunhua 2nd St.
+敦和2街	Dunhe 2nd St.
+敦榮1街	Dunrong 1st St.
+文吉北街	Wenji N. St.
+文吉南街	Wenji S. St.
+文城1路	Wencheng 1st Rd.
+文心2街	Wenxin 2nd St.
+文教東路	Wenjiao E. Rd.
+新富1路	Xinfu 1st Rd.
+新富3路	Xinfu 3rd Rd.
+新盛1路	Xinsheng 1st Rd.
+新站1路	Xinzhan 1st Rd.
+新站2路	Xinzhan 2nd Rd.
+新站3路	Xinzhan 3rd Rd.
+新興8街	Xinxing 8th St.
+旭日路	Xuri Rd.
+智慧1街	Zhihui 1st St.
+智慧2街	Zhihui 2nd St.
+智慧3街	Zhihui 3rd St.
+智慧科學大道1段	Sec. 1, Zhihuikexue Blvd.
+智慧科學大道2段	Sec. 2, Zhihuikexue Blvd.
+智慧科學大道3段	Sec. 3, Zhihuikexue Blvd.
+智慧綠能大道3段	Sec. 3, Zhihuiluneng Blvd.
+智發街	Zhifa St.
+智科路	Zhike Rd.
+朝天1街	Chaotian 1st St.
+朝天2街	Chaotian 2nd St.
+木新路	Muxin Rd.
+本庄街	Benzhuang St.
+東埔蚋路	Dongpurui Rd.
+東科6街	Dongke 6th St.
+東科9街	Dongke 9th St.
+東科路	Dongke Rd.
+東興1路	Dongxing 1st Rd.
+東西13路	Dongxi 13th Rd.
+松全街	Songquan St.
+松園1路	Songyuan 1st Rd.
+松園6路	Songyuan 6th Rd.
+松園8路	Songyuan 8th Rd.
+松強路	Songqiang Rd.
+松柏1街	Songbai 1st St.
+柚安路	You'an Rd.
+柳橋路	Liuqiao Rd.
+核3路	He 3rd Rd.
+桃航2路	Taohang 2nd Rd.
+桃航3路	Taohang 3rd Rd.
+桃航5路	Taohang 5th Rd.
+桃航6路	Taohang 6th Rd.
+梅州街	Meizhou St.
+楠海路	Nanhai Rd.
+榮德2路	Rongde 2nd Rd.
+榮貴街	Ronggui St.
+樂富2街	Lefu 2nd St.
+樂富3街	Lefu 3rd St.
+樂心街	Lexin St.
+橋科5路	Qiaoke 5th Rd.
+橋科6路	Qiaoke 6th Rd.
+橋科7路	Qiaoke 7th Rd.
+橋科8路	Qiaoke 8th Rd.
+橋科十路	Qiaoke 10th Rd.
+檔案館路	Dang'anguan Rd.
+歸智路	Guizhi Rd.
+水源南路	Shuiyuan S. Rd.
+水產園區1路	Shuichanyuanqu 1st Rd.
+水產園區2路	Shuichanyuanqu 2nd Rd.
+永善1街	Yongshan 1st St.
+永平東街	Yongping E. St.
+永平西街	Yongping W. St.
+永豐1街	Yongfeng 1st St.
+永運2路	Yongyun 2nd Rd.
+永運5路	Yongyun 5th Rd.
+池興街	Chixing St.
+油車1街	Youche 1st St.
+油車2街	Youche 2nd St.
+洲際2街	Zhouji 2nd St.
+海山港2路	Haishangang 2nd Rd.
+海方路	Haifang Rd.
+海東12街	Haidong 12th St.
+海洋路	Haiyang Rd.
+海福路	Haifu Rd.
+深圳11路	Shenzhen 11th Rd.
+深圳十路	Shenzhen 10th Rd.
+清海街	Qinghai St.
+清豐5路	Qingfeng 5th Rd.
+港子坪1街	Gangziping 1st St.
+湖埔3路	Hupu 3rd Rd.
+湯山大道	Tangshan Blvd.
+源福6街	Yuanfu 6th St.
+潮春街	Chaochun St.
+潮隆路	Chaolong Rd.
+烈新2路	Liexin 2nd Rd.
+物流北路	Wuliu N. Rd.
+玄威1路	Xuanwei 1st Rd.
+玄威2路	Xuanwei 2nd Rd.
+玄威路	Xuanwei Rd.
+玄武路	Xuanwu Rd.
+玉塘埤1路	Yutangpi 1st Rd.
+玉塘埤2路	Yutangpi 2nd Rd.
+玉塘埤3路	Yutangpi 3rd Rd.
+玉峰1路	Yufeng 1st Rd.
+玉峰路	Yufeng Rd.
+玉崑1街	Yukun 1st St.
+玉崑2街	Yukun 2nd St.
+玉崑3街	Yukun 3rd St.
+玉崑5街	Yukun 5th St.
+玉崑6街	Yukun 6th St.
+玉崑7街	Yukun 7th St.
+玉崑8街	Yukun 8th St.
+玉崑十街	Yukun 10th St.
+玉崑12街	Yukun 12th St.
+玉崑16街	Yukun 16th St.
+玉庫路	Yuku Rd.
+玉龍路	Yulong Rd.
+環城東路	Huancheng E. Rd.
+環城西路	Huancheng W. Rd.
+環堤路	Huandi Rd.
+甲典路	Jiadian Rd.
+甲埔大道	Jiapu Blvd.
+直加弄大道	Zhijialong Blvd.
+神農北路	Shennong N. Rd.
+祿元街	Luyuan St.
+福丸1路	Fuwan 1st Rd.
+福丸2路	Fuwan 2nd Rd.
+福宏路	Fuhong Rd.
+福山路	Fushan Rd.
+福松街	Fusong St.
+福祥1街	Fuxiang 1st St.
+福竹路	Fuzhu Rd.
+福興9街	Fuxing 9th St.
+秋田街	Qiutian St.
+科園南路	Keyuan S. Rd.
+科環1路	Kehuan 1st Rd.
+科環2路	Kehuan 2nd Rd.
+穎源路	Yingyuan Rd.
+竹圍1街	Zhuwei 1st St.
+糖南街	Tangnan St.
+糖工路	Tanggong Rd.
+紅山路	Hongshan Rd.
+經貿6街	Jingmao 6th St.
+綠園街	Luyuan St.
+綠能1街	Luneng 1st St.
+綠能2街	Luneng 2nd St.
+綠能3街	Luneng 3rd St.
+羅榮路	Luorong Rd.
+美城1路	Meicheng 1st Rd.
+美城2路	Meicheng 2nd Rd.
+美城3路	Meicheng 3rd Rd.
+美實路	Meishi Rd.
+美樹街	Meishu St.
+聖東路	Shengdong Rd.
+聖母5街	Shengmu 5th St.
+聚興工1路	Juxinggong 1st Rd.
+聚興工2路	Juxinggong 2nd Rd.
+聚興路	Juxing Rd.
+育文街	Yuwen St.
+致理街	Zhili St.
+臺江大道6段	Sec. 6, Taijiang Blvd.
+興北1路	Xingbei 1st Rd.
+興北2路	Xingbei 2nd Rd.
+興北3路	Xingbei 3rd Rd.
+興西1路	Xingxi 1st Rd.
+興西2路	Xingxi 2nd Rd.
+興西3路	Xingxi 3rd Rd.
+興賢路	Xingxian Rd.
+航福8路	Hangfu 8th Rd.
+航福路	Hangfu Rd.
+航青路	Hangqing Rd.
+芒果大道	Mangguo Blvd.
+芳林大道3段	Sec. 3, Fanglin Blvd.
+芳漢路	Fanghan Rd.
+草潭6街	Caotan 6th St.
+莊敬1街	Zhuangjing 1st St.
+菩提1路	Puti 1st Rd.
+萬和南街	Wanhe S. St.
+萬皇1路	Wanhuang 1st Rd.
+萬皇路	Wanhuang Rd.
+蓮山2路	Lianshan 2nd Rd.
+西科紋納街	Xikewenna St.
+誠聖2路	Chengsheng 2nd Rd.
+誠聖3路	Chengsheng 3rd Rd.
+貝濟耶路	Beijiye Rd.
+貨轉1路	Huozhuan 1st Rd.
+貨轉2路	Huozhuan 2nd Rd.
+貨轉3路	Huozhuan 3rd Rd.
+農園東路	Nongyuan E. Rd.
+鐵新1街	Tiexin 1st St.
+集福路	Jifu Rd.
+雙園路	Shuangyuan Rd.
+雙海路	Shuanghai Rd.
+青溪3路	Qingxi 3rd Rd.
+青葉路	Qingye Rd.
+頂新1路	Dingxin 1st Rd.
+頂新2路	Dingxin 2nd Rd.
+頂新3路	Dingxin 3rd Rd.
+頂新5路	Dingxin 5th Rd.
+頂新6路	Dingxin 6th Rd.
+順和1路	Shunhe 1st Rd.
+順和2路	Shunhe 2nd Rd.
+順和3路	Shunhe 3rd Rd.
+順和5路	Shunhe 5th Rd.
+順和6路	Shunhe 6th Rd.
+順和7路	Shunhe 7th Rd.
+順平3路	Shunping 3rd Rd.
+領航路	Linghang Rd.
+頭湖1路	Touhu 1st Rd.
+馬稠後園區5路	Machouhouyuanqu 5th Rd.
+馬稠後園區6路	Machouhouyuanqu 6th Rd.
+馬稠後園區8路	Machouhouyuanqu 8th Rd.
+馬稠後園區9路	Machouhouyuanqu 9th Rd.
+馬稠後園區15路	Machouhouyuanqu 15th Rd.
+馬稠後園區16路	Machouhouyuanqu 16th Rd.
+馬稠後園區17路	Machouhouyuanqu 17th Rd.
+馬稠後園區19路	Machouhouyuanqu 19th Rd.
+高鐵北2路	Gaotie N. 2nd Rd.
+高鐵北3路	Gaotie N. 3rd Rd.
+高鐵綠園路	Gaotieluyuan Rd.
+鵬灣大道3段	Sec. 3, Pengwan Blvd.
+鵬程東1路	Pengcheng E. 1st Rd.
+鵬程西街	Pengcheng W. St.
+鹿工南8路	Lugong S. 8th Rd.
+鹿福9路	Lufu 9th Rd.
+麻口1街	Makou 1st St.
+麻口2街	Makou 2nd St.
+麻口3街	Makou 3rd St.
+麻柚2路	Mayou 2nd Rd.
+麻柚3路	Mayou 3rd Rd.
+黃竹圍街	Huangzhuwei St.
+龍富2路	Longfu 2nd Rd.
+龍富3街	Longfu 3rd St.
+龍富5街	Longfu 5th St.
+龍富路	Longfu Rd.
+
+#	--- Lanes -------------------------------------------------------------
+69橫巷	69th Side Ln.
+二溪路湖西巷	Huxi Ln., Erxi Rd.
+來義大橋巷	Laiyidaqiao Ln.
+偉糖巷	Weitang Ln.
+龍園巷	Longyuan Ln.
+
+#	--- Villages, settlements and named places ----------------------------
+一市場	1st Market
+二市場	2nd Market
+南市場	S. Market
+三界壇店	Sanjietandian
+上庄	Shangzhuang
+光明	Guangming
+全福山莊	Quanfu Villa
+喜龍	Xilong
+外平林康福家園	Kangfujiayuan, Waipinglin
+小楊梅	Xiaoyangmei
+尚義新村	Shangyi New Vil.
+慈光廿七村	Ciguang 27th Vil.
+慈光廿八村	Ciguang 28th Vil.
+慈光廿九村	Ciguang 29th Vil.
+明昌	Mingchang
+廟後	Miaohou
+蚵間段	Ejian Sec.
+梅花山	Meihuashan
+深圳	Shenzhen
+火燒樟	Huoshaozhang
+牛頭	Niutou
+臺糖	Taitang
+觀高	Guangao
+許厝港	Xucuogang
+鞍部	Anbu
+頂部村	Dingbu Vil.

@@ -66,6 +66,76 @@ directory.find('臺北市信義區市府路1號') // '110204'
 
 The data files are included in the npm package; copy them to a location your site can serve during its build process.
 
+### English address translation
+
+`translate(address)` renders a Chinese address in English, reversing the field order the way Chunghwa Post writes it:
+
+```js
+import { translate } from 'tw-fuzzy-zipcode'
+
+translate('臺北市信義區市府路1號').english
+// 'No. 1, Shifu Rd., Xinyi Dist., Taipei City 110204, Taiwan (R.O.C.)'
+translate('臺北市中正區忠孝東路一段1巷1弄1號1樓').english
+// '1F., No. 1, Aly. 1, Ln. 1, Sec. 1, Zhongxiao E. Rd., Zhongzheng Dist., Taipei City 100009, Taiwan (R.O.C.)'
+
+translate('臺北市中山區松江路100號')
+// {
+//   english: 'No. 100, Songjiang Rd., Zhongshan Dist., Taipei City 104091, Taiwan (R.O.C.)',
+//   parts: { city: 'Taipei City', district: 'Zhongshan Dist.',
+//            road: 'Songjiang Rd.', number: 'No. 100', zipcode: '104091' },
+//   untranslated: [],
+//   complete: true,
+// }
+```
+
+The ZIP code is looked up and included automatically. Pass `translate(address, { zipcode })` to supply your own, or `{ country: null }` to drop the trailing country line. `parts` holds each field already translated, so `formatEnglish(parts, country)` can lay them out differently.
+
+**Nothing is romanized on the fly.** Every name comes from Chunghwa Post's official bilingual data, and `english` makes the same promise `find()` does: **a non-empty value is always a complete, deliverable English address**. When a name has no official translation, or the address never resolves to a county/city, `english` is `''` and `complete` is `false`; the missing names are listed in `untranslated`, and everything that did translate stays in `parts` for the caller to build on:
+
+```js
+const { english, parts, untranslated, complete } = translate('宜蘭縣礁溪鄉北宜路1號')
+// english: '',  untranslated: ['北宜路'],  complete: false
+// parts: { number: 'No. 1', road: '北宜路',
+//          district: 'Jiaoxi Township', city: 'Yilan County', zipcode: '262' }
+
+translate('中正路100號')
+// 中正路 exists all over Taiwan and nothing here says which: english is '',
+// but parts still holds { road: 'Zhongzheng Rd.', number: 'No. 100' }
+```
+
+Measured against the bundled postal directory, 99.99% of addresses translate completely (4 of 44,635 fall short, all of them malformed rows in the source data: uninhabited islands whose county name was truncated to the column width, 南海諸島 filed as 南海諸). **An empty result beats a guess** — a sender cannot tell a wrong romanization from a right one, but can tell nothing from something.
+
+District names shared by several cities (中正區 exists in four) are treated the same way: if the rest of the address does not say which one, the field stays Chinese and `english` stays empty.
+
+### Cross-checking the road against the location
+
+The bilingual tables are nationwide and carry no location, so 四維三路 translates just as happily under 臺北市信義區 as under the 高雄市苓雅區 it actually belongs to. Only the ZIP directory knows which roads are where, so `Translator` takes an optional `verify` callback — which is what `Directory.knowsRoad` exists for:
+
+```js
+new Translator({ roadTsv, districtTsv, verify: (address) => directory.knowsRoad(address) })
+
+translate('臺北市信義區四維三路2號').english   // '' — Xinyi Dist. has no 四維三路
+translate('高雄市苓雅區四維三路2號').english   // 'No. 2, Siwei 3rd Rd., Lingya Dist., ...'
+```
+
+The Node entry point loads the ZIP directory anyway, so its `translate()` turns this **on by default**. A bare `new Translator({ roadTsv, districtTsv })` leaves it off, so a browser that wants translation without the ZIP data still works.
+
+`knowsRoad()` only rejects an address when the directory has something to say about it. An address that names no road, or a rural 村/里 one — which the directory files by village rather than by street, so a real address like 南投縣中寮鄉永和村中正路 appears in neither index — always passes. Measured over the bundled directory's 44,635 addresses in four written shapes (178,540 in all), it wrongly rejects 3, every one of them the malformed 釣魚臺列嶼 row described above.
+
+Browsers load the two data files themselves, as with the ZIP code directory:
+
+```js
+import { loadTranslator } from 'tw-fuzzy-zipcode/translate'
+
+const translator = await loadTranslator({
+  roadUrl: '/data/road_en.tsv',
+  districtUrl: '/data/district_en.tsv',
+})
+translator.translate('臺北市信義區市府路1號', { zipcode: '110204' }).english
+```
+
+The browser translator neither restores an omitted city or district nor looks up ZIP codes; run the address through `Directory`'s `canonical()` and `find()` first if you need either.
+
 ## How matching works
 
 1. The input is normalized for 台／臺, full-width characters, and common Chinese numeral forms.
@@ -100,6 +170,21 @@ For the two index implementations, the measurement method, and its caveats, see 
 
 Chunghwa Post's 3+3 ZIP Code Open License Statement (2020-10-22) permits digital reproduction and public presentation of the 3+3 ZIP code data through different interfaces. Use remains subject to its software terms and third-party rights. This project credits Chunghwa Post as the source.
 
+The three bilingual tables behind the English translation also come from Chunghwa Post, romanized with Hanyu Pinyin per the Ministry of Education's 中文譯音使用原則:
+
+| File | Source | Contents |
+| ---- | ------ | -------- |
+| `data/road_en.txt` | [中華郵政路街中英對照文字檔](https://data.gov.tw/dataset/152276) | 29,983 bilingual road and street names |
+| `data/county_en.xml` | [縣市鄉鎮中英對照檔](https://data.gov.tw/dataset/5949) | 371 districts and 22 cities and counties |
+| `data/village_en.csv` | [村里中英對照檔](https://www.post.gov.tw/post/internet/Postal/village.txt) | 8,521 villages and named lanes |
+| `data/road_en_extra.tsv` | maintained by this project | 403 names the official files omit |
+
+The first two are published on Taiwan's open data platform under the Open Government Data License, version 1.0. The village file supplies 6,977 names the road file lacks; where the two disagree (109 names) the newer road file wins, and most of the spellings it replaces predate Hanyu Pinyin.
+
+The published files lag the post office's own online lookup — 東彰南路 is absent from the download but returned by the website — so `data/road_en_extra.tsv` fills those in using the same conventions, and overrides the official values at pack time. Re-downloading the official data never discards them.
+
+`npm run build:en` converts all four into `data/road_en.tsv` and `data/district_en.tsv`.
+
 ## Development and verification
 
 The project has no runtime dependencies. Rebuilding the data or refreshing the test fixture requires Python and the original Python reference package:
@@ -108,6 +193,7 @@ The project has no runtime dependencies. Rebuilding the data or refreshing the t
 python3 scripts/dbf_to_csv.py rall1.dbf data/2606_01.csv
 pip install zipcodetw
 npm run build
+npm run build:en
 npm run build:golden
 npm run typecheck
 npm test

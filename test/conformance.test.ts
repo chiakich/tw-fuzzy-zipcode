@@ -4,12 +4,16 @@
 
 import type * as browserDecl from '../src/zipcodetw.d.ts';
 import type * as nodeDecl from '../src/node.d.ts';
+import type * as translateDecl from '../src/translate.d.ts';
 
 import * as browserImpl from '../src/zipcodetw.mjs';
 import * as nodeImpl from '../src/node.mjs';
+import * as translateImpl from '../src/translate.mjs';
 
 const browserConforms: typeof browserDecl = browserImpl;
 const nodeConforms: typeof nodeDecl = nodeImpl;
+const translateConforms: typeof translateDecl = translateImpl;
 
 void browserConforms;
 void nodeConforms;
+void translateConforms;

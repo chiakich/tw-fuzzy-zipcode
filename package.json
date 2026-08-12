@@ -26,6 +26,7 @@
   },
   "files": [
     "src",
+    "README.md",
     "README.en.md",
     "data/gradual.tsv",
     "data/precise.tsv",

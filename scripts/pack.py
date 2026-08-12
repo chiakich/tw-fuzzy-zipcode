@@ -37,6 +37,19 @@ def tail_of(addr_str, rule_str):
     return n[len(addr_str):]
 
 
+def check_catch_all_last(precise):
+    # rowid only tracks CSV order while `precise` stays a rowid table upstream;
+    # a WITHOUT ROWID redefinition would silently sort by primary key again.
+    # The catch-all's position is the cheapest observable proof that it didn't.
+    for addr_str, rzpairs in precise.items():
+        rules = [r for r, _ in rzpairs]
+        catch_all = addr_str + '全'
+        if len(rules) > 1 and catch_all in rules[:-1]:
+            raise AssertionError(
+                'rules for %s are not in CSV order: the 全 catch-all must come '
+                'last, got %r' % (addr_str, rules))
+
+
 def build(csv_path, out_dir):
     out_dir = Path(out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -52,16 +65,24 @@ def build(csv_path, out_dir):
         gradual = dict(conn.execute('select addr_str, zipcode from gradual'))
 
         precise = {}
-        # find() reads rules through the (addr_str, rule_str) index, so it
-        # sees them in rule_str order and returns the first match. The
-        # exported bundle must preserve that order exactly, or lookups on
-        # roads with multiple overlapping rules can silently return the
-        # wrong zipcode.
+        # Rule order is match priority: find() returns the first rule that
+        # matches, and overlapping rules are common. Chunghwa Post encodes the
+        # priority as row order -- narrow exceptions first, the '全' catch-all
+        # last -- so the bundle must keep the CSV's order. `precise` is a rowid
+        # table filled by `insert or ignore`, so rowid is that order.
+        #
+        # Sorting by rule_str instead (as this did until 0.2.1) collates by
+        # codepoint, which is unrelated to how wide a rule is: '全' lands ahead
+        # of '單'/'連'/'雙', and '單159號至675號' ahead of '單561號至579號'.
+        # The widest rule then shadows the exception it was meant to fall back
+        # to -- 844 roads answered with the wrong zipcode.
         rows = conn.execute(
             'select addr_str, rule_str, zipcode from precise '
-            'order by addr_str, rule_str')
+            'order by addr_str, rowid')
         for a, r, z in rows:
             precise.setdefault(a, []).append((r, z))
+
+        check_catch_all_last(precise)
 
     gk = sorted(gradual)
     with open(out_dir / 'gradual.tsv', 'w', encoding='utf-8') as f:

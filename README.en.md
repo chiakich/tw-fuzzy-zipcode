@@ -220,7 +220,7 @@ The box number itself doesn't affect the ZIP code; omitting 第 or extra whitesp
 1. The input is normalized for 台／臺, full-width characters, and common Chinese numeral forms.
 2. The raw address is tokenized into city, district, road, lane, alley, house number, and related fragments.
 3. If the address omits the city or the district and the shortened form names exactly one road nationwide, the missing fragments are restored before matching continues. Forms that name several roads are left alone rather than guessed.
-4. When sufficient detail is present, house-number rules for odd/even numbers, above, below, and ranges produce a 6-digit ZIP code.
+4. When sufficient detail is present, house-number rules for odd/even numbers, above, below, and ranges produce a 6-digit ZIP code. Several rules often match one address — a stretch of house numbers may have its own delivery segment while a whole-road `全` rule backs up the rest — and the first matching rule wins. Rules keep the row order of Chunghwa Post's own file, exceptions before the `全` catch-all, so the narrower rule is always the one that matches first.
 5. With less detail, a gradual address index produces a usable 3-digit ZIP code. If the match only identifies a broad prefix such as a city, `find()` returns an empty string and `lookup()` exposes the resolution instead.
 
 ## TypeScript

@@ -42,13 +42,15 @@ new Directory({ gradualTsv, preciseTsv, storage: 'map' })
 
 ## 正確性
 
-`test/fixtures/golden_find.tsv` 收錄 90,950 筆查詢，跨整份資料集等距抽樣，每筆都標註了上游 Python 版 [moskytw/zipcodetw](https://github.com/moskytw/zipcodetw) 的答案，另加人工邊界案例。
+`test/fixtures/golden_find.tsv` 收錄 90,953 筆查詢，跨整份資料集等距抽樣，每筆都標註了上游 Python 版 [moskytw/zipcodetw](https://github.com/moskytw/zipcodetw) 的答案，另加人工邊界案例。
 
 | 結果               | 筆數   | 佔比   |
 | ------------------ | ------ | ------ |
-| 與參考實作完全相同 | 90,596 | 99.61% |
+| 與參考實作完全相同 | 90,599 | 99.61% |
 | 解得更細           | 354    | 0.39%  |
 | **與參考實作牴觸** | **0**  | **0%** |
+
+參考實作在產生這份 fixture 時打了一個補丁：讓它依中華郵政 CSV 的原始列序讀取每條路的門牌規則。上游未指定 `order by`，SQLite 因而循 `(addr_str, rule_str)` 主鍵索引供列，規則被按字碼排序——但規則順序代表的是比對優先序，字碼順序與規則涵蓋範圍寬窄無關，於是「全」這類 catch-all 會蓋掉它本來要墊底的特例。未打補丁的話，上表 459 筆查詢會由錯誤的規則作答（例如 `新北市三峽區三樹路291號` 答 `237012`，CSV 寫的是 `237641`）。此處以中華郵政的資料為準，而非上游對它的讀法。
 
 「解得更細」是因為 `canonicalize()` 會處理 Python 版未處理的省略寫法，例如只寫出全國唯一的路名如 `松江路100號` 時，我們給出 `104091`，而 Python 版只到 3 碼。
 

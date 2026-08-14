@@ -1,20 +1,24 @@
-# tw-fuzzy-zipcode
+# tw-address-tools
 
-[![npm version](https://img.shields.io/npm/v/tw-fuzzy-zipcode.svg)](https://www.npmjs.com/package/tw-fuzzy-zipcode)
-[![npm downloads](https://img.shields.io/npm/dm/tw-fuzzy-zipcode.svg)](https://www.npmjs.com/package/tw-fuzzy-zipcode)
-[![license](https://img.shields.io/npm/l/tw-fuzzy-zipcode.svg)](LICENSE)
+[![npm version](https://img.shields.io/npm/v/tw-address-tools.svg)](https://www.npmjs.com/package/tw-address-tools)
+[![npm downloads](https://img.shields.io/npm/dm/tw-address-tools.svg)](https://www.npmjs.com/package/tw-address-tools)
+[![license](https://img.shields.io/npm/l/tw-address-tools.svg)](LICENSE)
 
-[English](README.en.md) · [線上 Demo](https://zipcode.chiaki.ch/) · [npm](https://www.npmjs.com/package/tw-fuzzy-zipcode)
+[English](README.en.md) · [線上 Demo](https://zipcode.chiaki.ch/) · [npm](https://www.npmjs.com/package/tw-address-tools)
 
-從未拆欄位的台灣地址，模糊查詢郵遞區號的無相依 JavaScript 套件。它可處理完整、部分或順序不完整的地址，並支援「台／臺」、全半形與中文數字等常見寫法；所有查詢都在用戶端完成，不需要伺服器、WASM 或 SQLite。
+從未拆欄位的台灣地址，模糊查詢郵遞區號、翻譯英文地址的無相依 JavaScript 套件。它可處理完整、部分或順序不完整的地址，並支援「台／臺」、全半形與中文數字等常見寫法；所有查詢與翻譯都在用戶端完成，不需要伺服器、WASM 或 SQLite。
 
 這是 [moskytw/zipcodetw](https://github.com/moskytw/zipcodetw) 比對演算法的 JavaScript 移植版。若你的資料已經分成縣市、鄉鎮市區、路名與門牌等欄位，請優先考慮使用較適合表單資料的 [`@simoko/tw-zip`](https://www.npmjs.com/package/@simoko/tw-zip)。本套件的適用情境是使用者貼上的原始地址、OCR 結果或既有的單一文字地址欄位。
 
 ## 安裝
 
 ```bash
-npm install tw-fuzzy-zipcode
+npm install tw-address-tools
 ```
+
+### 從 `tw-fuzzy-zipcode` 遷移
+
+套件原名為 `tw-fuzzy-zipcode`。將安裝指令與所有 import 的套件名稱改成 `tw-address-tools` 即可；公開 API 與子路徑（`/browser`、`/mailbox`、`/translate`）維持不變。
 
 ## 使用方式
 
@@ -25,7 +29,7 @@ https://zipcode.chiaki.ch/
 ### Node.js 使用
 
 ```js
-import { find, lookup } from 'tw-fuzzy-zipcode'
+import { find, lookup } from 'tw-address-tools'
 
 find('臺北市信義區市府路1號')
 // '110204'
@@ -66,7 +70,7 @@ lookup('臺北市')
 瀏覽器環境沒有 `fs`，需要使用函數 `loadZipcode()` 載入對照表資料檔。函數會建立 `Zipcode`，它的方法與上一節的函式同名：
 
 ```js
-import { loadZipcode } from 'tw-fuzzy-zipcode/browser'
+import { loadZipcode } from 'tw-address-tools/browser'
 
 const zip = await loadZipcode({
   gradualUrl: '/data/gradual.tsv',
@@ -108,8 +112,8 @@ zip.find('基隆愛三路郵局第5號信箱') // '200900'
 全部載齊長這樣：
 
 ```js
-import { loadZipcode } from 'tw-fuzzy-zipcode/browser'
-import { loadTranslator } from 'tw-fuzzy-zipcode/translate'
+import { loadZipcode } from 'tw-address-tools/browser'
+import { loadTranslator } from 'tw-address-tools/translate'
 
 const zip = await loadZipcode({
   gradualUrl: '/data/gradual.tsv',
@@ -125,10 +129,10 @@ const translator = await loadTranslator({
 })
 ```
 
-只要其中一份的話，三個入口分別是 `tw-fuzzy-zipcode/browser`（門牌＋信箱）、`tw-fuzzy-zipcode/mailbox`（只有信箱）、`tw-fuzzy-zipcode/translate`（只有中英對照）。
+只要其中一份的話，三個入口分別是 `tw-address-tools/browser`（門牌＋信箱）、`tw-address-tools/mailbox`（只有信箱）、`tw-address-tools/translate`（只有中英對照）。
 
 ```js
-import { loadMailbox } from 'tw-fuzzy-zipcode/mailbox'
+import { loadMailbox } from 'tw-address-tools/mailbox'
 
 const mailbox = await loadMailbox({ mailboxUrl: '/data/mailbox.tsv' })
 mailbox.find('基隆愛三路郵局第5號信箱') // '200900'
@@ -145,7 +149,7 @@ mailbox.find('基隆愛三路郵局第5號信箱') // '200900'
 `translate(address)` 會依中華郵政的書寫規則，把中文地址翻成英文並反轉語序：
 
 ```js
-import { translate } from 'tw-fuzzy-zipcode'
+import { translate } from 'tw-address-tools'
 
 translate('臺北市信義區市府路1號').english
 // 'No. 1, Shifu Rd., Xinyi Dist., Taipei City 110204, Taiwan (R.O.C.)'
@@ -205,7 +209,7 @@ Node 入口本來就會載入郵遞區號目錄，所以 `translate()` 預設開
 郵局專用信箱地址（例如「OO郵局第N號信箱」）不是門牌，走的是完全不同的資料與規則：郵遞區號由郵局名稱直接對照得出，不經過門牌規則比對。`find()` 與 `lookup()` 已經涵蓋這類地址，`lookup()` 會以 `source: 'mailbox'` 標示：
 
 ```js
-import { find, lookup } from 'tw-fuzzy-zipcode'
+import { find, lookup } from 'tw-address-tools'
 
 find('基隆愛三路郵局第5號信箱')
 // '200900'

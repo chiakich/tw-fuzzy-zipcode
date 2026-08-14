@@ -1,6 +1,6 @@
-import { find, getDirectory, lookup, translate } from 'tw-fuzzy-zipcode';
-import { Directory, loadDirectory } from 'tw-fuzzy-zipcode/browser';
-import { Translator, loadTranslator } from 'tw-fuzzy-zipcode/translate';
+import { find, getDirectory, lookup, translate } from 'tw-address-tools';
+import { Directory, loadDirectory } from 'tw-address-tools/browser';
+import { Translator, loadTranslator } from 'tw-address-tools/translate';
 
 const zipcode: string = find('臺北市信義區市府路1號');
 const directory: Directory = getDirectory();

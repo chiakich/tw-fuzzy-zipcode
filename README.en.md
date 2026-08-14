@@ -1,20 +1,24 @@
-# tw-fuzzy-zipcode
+# tw-address-tools
 
-[![npm version](https://img.shields.io/npm/v/tw-fuzzy-zipcode.svg)](https://www.npmjs.com/package/tw-fuzzy-zipcode)
-[![npm downloads](https://img.shields.io/npm/dm/tw-fuzzy-zipcode.svg)](https://www.npmjs.com/package/tw-fuzzy-zipcode)
-[![license](https://img.shields.io/npm/l/tw-fuzzy-zipcode.svg)](LICENSE)
+[![npm version](https://img.shields.io/npm/v/tw-address-tools.svg)](https://www.npmjs.com/package/tw-address-tools)
+[![npm downloads](https://img.shields.io/npm/dm/tw-address-tools.svg)](https://www.npmjs.com/package/tw-address-tools)
+[![license](https://img.shields.io/npm/l/tw-address-tools.svg)](LICENSE)
 
-[繁體中文](README.md) · [Live demo](https://zipcode.chiaki.ch/) · [npm](https://www.npmjs.com/package/tw-fuzzy-zipcode)
+[繁體中文](README.md) · [Live demo](https://zipcode.chiaki.ch/) · [npm](https://www.npmjs.com/package/tw-address-tools)
 
-Dependency-free JavaScript lookup for Taiwan ZIP codes from raw, unstructured addresses. It handles complete, partial, or out-of-order addresses and common variants such as 台／臺, full-width characters, and Chinese numerals. Everything runs client-side: no server, WASM, or SQLite required.
+Dependency-free JavaScript tools for fuzzy Taiwan address lookup, ZIP-code resolution, and English translation. It handles complete, partial, or out-of-order addresses and common variants such as 台／臺, full-width characters, and Chinese numerals. Everything runs client-side: no server, WASM, or SQLite required.
 
 This is a JavaScript port of the matching algorithm in [moskytw/zipcodetw](https://github.com/moskytw/zipcodetw). If your input is already split into city, district, road, and house-number fields, [`@simoko/tw-zip`](https://www.npmjs.com/package/@simoko/tw-zip) is likely a better fit. This package is intended for pasted addresses, OCR output, and existing single-field address inputs.
 
 ## Install
 
 ```bash
-npm install tw-fuzzy-zipcode
+npm install tw-address-tools
 ```
+
+### Migrating from `tw-fuzzy-zipcode`
+
+This package was previously named `tw-fuzzy-zipcode`. Replace the package name in the install command and every import with `tw-address-tools`; its public API and subpaths (`/browser`, `/mailbox`, and `/translate`) are unchanged.
 
 ## Usage
 
@@ -25,7 +29,7 @@ https://zipcode.chiaki.ch/
 ### Node.js usage
 
 ```js
-import { find, lookup } from 'tw-fuzzy-zipcode'
+import { find, lookup } from 'tw-address-tools'
 
 find('臺北市信義區市府路1號')
 // '110204'
@@ -57,7 +61,7 @@ Use `lookup(address)` when the UI needs the matching detail. It returns `null` o
 Browsers do not have `fs`, so load the packaged data files yourself. `loadZipcode()` handles loading failures and creates a `Zipcode`, whose methods carry the same names as the functions above:
 
 ```js
-import { loadZipcode } from 'tw-fuzzy-zipcode/browser'
+import { loadZipcode } from 'tw-address-tools/browser'
 
 const zip = await loadZipcode({
   gradualUrl: '/data/gradual.tsv',
@@ -99,8 +103,8 @@ None of them is loaded by default — in the browser you get the features you lo
 All three together:
 
 ```js
-import { loadZipcode } from 'tw-fuzzy-zipcode/browser'
-import { loadTranslator } from 'tw-fuzzy-zipcode/translate'
+import { loadZipcode } from 'tw-address-tools/browser'
+import { loadTranslator } from 'tw-address-tools/translate'
 
 const zip = await loadZipcode({
   gradualUrl: '/data/gradual.tsv',
@@ -116,10 +120,10 @@ const translator = await loadTranslator({
 })
 ```
 
-For one dictionary on its own, the three entry points are `tw-fuzzy-zipcode/browser` (door-number + box), `tw-fuzzy-zipcode/mailbox` (box only), and `tw-fuzzy-zipcode/translate` (bilingual only). What is separated is the **data**: you download only the TSVs you load. The modules do share a little code — `mailbox` and `translate` both use `PackedTable` and `normalize` from `zipcodetw.mjs` — but that is a few KB of decoding and normalization, not data.
+For one dictionary on its own, the three entry points are `tw-address-tools/browser` (door-number + box), `tw-address-tools/mailbox` (box only), and `tw-address-tools/translate` (bilingual only). What is separated is the **data**: you download only the TSVs you load. The modules do share a little code — `mailbox` and `translate` both use `PackedTable` and `normalize` from `zipcodetw.mjs` — but that is a few KB of decoding and normalization, not data.
 
 ```js
-import { loadMailbox } from 'tw-fuzzy-zipcode/mailbox'
+import { loadMailbox } from 'tw-address-tools/mailbox'
 
 const mailbox = await loadMailbox({ mailboxUrl: '/data/mailbox.tsv' })
 mailbox.find('基隆愛三路郵局第5號信箱') // '200900'
@@ -136,7 +140,7 @@ When in doubt, use `find()`. Its extra cost on door-number addresses sits inside
 `translate(address)` renders a Chinese address in English, reversing the field order the way Chunghwa Post writes it:
 
 ```js
-import { translate } from 'tw-fuzzy-zipcode'
+import { translate } from 'tw-address-tools'
 
 translate('臺北市信義區市府路1號').english
 // 'No. 1, Shifu Rd., Xinyi Dist., Taipei City 110204, Taiwan (R.O.C.)'
@@ -194,7 +198,7 @@ In the browser you wire `verify` up yourself, and `mailbox` with it — without 
 Chunghwa Post P.O. box addresses ('OO郵局第N號信箱') aren't door-number addresses, so they run on entirely different data and rules: the ZIP code comes straight from the post office's name and never touches the door-number rules. `find()` and `lookup()` already cover them, and `lookup()` labels them with `source: 'mailbox'`:
 
 ```js
-import { find, lookup } from 'tw-fuzzy-zipcode'
+import { find, lookup } from 'tw-address-tools'
 
 find('基隆愛三路郵局第5號信箱')
 // '200900'

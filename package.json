@@ -1,7 +1,7 @@
 {
-  "name": "tw-fuzzy-zipcode",
+  "name": "tw-address-tools",
   "version": "0.2.2",
-  "description": "Fuzzy free-text Taiwan address -> ZIP code lookup — a dependency-free JS port of moskytw/zipcodetw. Runs entirely client-side.",
+  "description": "Fuzzy Taiwan address lookup, ZIP-code resolution, and English translation — dependency-free and client-side.",
   "type": "module",
   "license": "MIT",
   "main": "./src/node.mjs",
@@ -51,7 +51,9 @@
     "郵遞區號",
     "address",
     "fuzzy",
-    "fuzzy-search"
+    "fuzzy-search",
+    "address-translation",
+    "english-address"
   ],
   "devDependencies": {
     "@types/node": "^26.2.0",
